@@ -31,10 +31,23 @@
 #define ENC_4_DT 33
 #define Button 35
 
-#define Encoder_MAP 42
+#define Encoder_MAP 84
 #define TextColor  TFT_PURPLE
 #define BgColor    TFT_WHITE
 #define FrontColor TFT_PURPLE
+
+#define OFF 0.0
+#define ON 1.0
+
+
+#define SPEED 1
+#define DEPTH 2
+#define STROKE 3
+#define SENSATION 4
+#define PATTERN 5
+#define TORQE 6
+#define OFF 10
+#define ON   11
 
 int displaywidth;
 int displayheight;
@@ -76,6 +89,9 @@ float out_esp_sensation;
 float out_esp_pattern;
 bool out_esp_rstate;
 bool out_esp_connected;
+int out_esp_command;
+float out_esp_value;
+
 
 float incoming_esp_speed;
 float incoming_esp_depth;
@@ -93,6 +109,8 @@ typedef struct struct_message {
   float esp_pattern;
   bool esp_rstate;
   bool esp_connected;
+  int esp_command;
+  float esp_value;
 } struct_message;
 
 bool esp_connect = false;
@@ -102,10 +120,16 @@ struct_message incomingcontrol;
 
 esp_now_peer_info_t peerInfo;
 
-TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote
+
+TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
+TaskHandle_t vibrate_t  = nullptr; // Vibration Task
+TaskHandle_t home_t     = nullptr; // Homescreen Task
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
+void vibrationTask(void *pvParameters); // Handels the EspNow Remote
+void homescreentask(void *pvParameters); // Handels the Homescreen
 void menueUpdate(int select); //Handels update of Menue
 void drawdisplay(); //Handels Display Drawing
+void connectbtn(); //Handels Connectbtn
 
 void powerBar(int x, int y, int w, int h, uint8_t val) {
   M5.lcd.drawRect(x, y, w, h, FrontColor);
@@ -118,24 +142,40 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
-  Serial.print("Bytes received: ");
-  Serial.println(len);
+  LogDebug("Bytes received: ");
+  LogDebug(len);
 
   if(esp_connect == false && incomingcontrol.esp_connected == true){  
     speedlimit = incomingcontrol.esp_speed;
     maxdepthinmm = incomingcontrol.esp_depth;
-    sensation = 0.0;
     pattern = incomingcontrol.esp_pattern;
     outgoingcontrol.esp_connected = false;
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    LogDebug(result);
     if (result == ESP_OK) {
       esp_connect = true;
       outgoingcontrol.esp_connected = true;
       M5.Lcd.setCursor(5,20);
       M5.Lcd.setFont(&FreeSansBold9pt7b);
       M5.Lcd.print("CON");
+      menueUpdate(2);
+      delay(200);
+      vTaskResume(home_t);
     }
   } 
+}
+
+//Sends Commands and Value to Remote device returns ture or false if sended
+bool SendCommand(int Command, float Value){
+      outgoingcontrol.esp_connected = true;
+      outgoingcontrol.esp_command = Command;
+      outgoingcontrol.esp_value = Value;
+      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      if (result == ESP_OK) {
+      return true;
+      } else {
+      return false;
+      }
 }
 
 void setup(){
@@ -153,6 +193,24 @@ void setup(){
                             0);                 /* pin task to core 0 */
   delay(100);
 
+  xTaskCreatePinnedToCore(homescreentask,     /* Task function. */
+                            "homescreentask", /* name of task. */
+                            6072,                /* Stack size of task */
+                            NULL,                /* parameter of the task */
+                            1,                   /* priority of the task */
+                            &home_t,            /* Task handle to keep track of created task */
+                            0);                  /* pin task to core 0 */
+  vTaskSuspend(home_t);
+
+  xTaskCreatePinnedToCore(vibrationTask,     /* Task function. */
+                            "vibrationTask", /* name of task. */
+                            2048,                /* Stack size of task */
+                            NULL,                /* parameter of the task */
+                            1,                   /* priority of the task */
+                            &vibrate_t,            /* Task handle to keep track of created task */
+                            0);                  /* pin task to core 0 */
+  vTaskSuspend(vibrate_t);
+
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
@@ -167,122 +225,42 @@ void setup(){
   S1Pos = S2Pos - progheight - distheight;
 
   drawdisplay();
-  menueUpdate(2);
+  menueUpdate(0);
   powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
   powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
   powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
   powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
-  
-  outgoingcontrol.esp_connected = false;
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-  if (result == ESP_OK) {
-  }
+
   encoder4.setCount(Encoder_MAP*0.5);
 }
 
 void loop()
 {
-  M5.update();
-  M5.Lcd.setTextColor(TextColor);
+    M5.update();
+    if(esp_connect == false){
+    if(M5.BtnA.wasReleased()) {
+    connectbtn();
+    delay(500);
+    }
 
-  if(esp_connect == true){
-
-  if(encoder1.getCount() != enc1){
-    enc1 = encoder1.getCount();
-    speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(encoder1.getCount(),0,Encoder_MAP), -3);
-    outgoingcontrol.esp_speed = speed;
-    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-    M5.Lcd.fillRect(85,S1Pos,200,30,TFT_WHITE);
-    int mm = speed;
-    M5.Lcd.setCursor(95,S1Pos+progheight-5);
-    M5.Lcd.print(mm);
-    M5.Lcd.print(" F/m");
-    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-      Serial.println("Sent with success");
-      }
-  }
-
-  if(encoder2.getCount() != enc2){
-    enc2 = encoder2.getCount();
-    depth = map(constrain(enc2,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
-    outgoingcontrol.esp_depth = depth;
-    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-    M5.Lcd.fillRect(85,S2Pos,200,30,TFT_WHITE);
-    int mm = depth;
-    M5.Lcd.setCursor(95,S2Pos+progheight-5);
-    M5.Lcd.print(mm);
-    M5.Lcd.print(" mm");
-    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-      Serial.println("Sent with success");
-      }
-  }
-
-  if(encoder3.getCount() != enc3){
-    enc3 = encoder3.getCount();
-    stroke = map(constrain(encoder3.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
-    outgoingcontrol.esp_stroke = stroke;
-    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-    M5.Lcd.fillRect(85,S3Pos,200,30,TFT_WHITE);
-    int mm = stroke;
-    M5.Lcd.setCursor(95,S3Pos+progheight-5);
-    M5.Lcd.print(mm);
-    M5.Lcd.print(" mm");
-    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
-
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-      Serial.println("Sent with success");
-      }
-      else {
-      Serial.println("Error sending the data");
-      }
-  }
-
-  if(encoder4.getCount() != enc4){
-    enc4 = encoder4.getCount();
-    sensation = map(constrain(encoder4.getCount(),0,Encoder_MAP),0,Encoder_MAP,-100,100);
-    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
-    outgoingcontrol.esp_sensation = sensation;
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-      Serial.println("Sent with success");
-      }
-  }
-
-  if(M5.BtnA.wasPressed()) {
-     rstate = true;
-     outgoingcontrol.esp_rstate = rstate;
-     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-        menueUpdate(1);
-        M5.Axp.SetLDOEnable(3,true);
-        delay(100);
-        M5.Axp.SetLDOEnable(3,false);
-      } 
-  }
-
-  
-  if(M5.BtnC.wasPressed()) {
-    rstate = false;
-    outgoingcontrol.esp_rstate = rstate;
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-        menueUpdate(2);
-        M5.Axp.SetLDOEnable(3,true);
-        delay(200);
-        M5.Axp.SetLDOEnable(3,false);
-      }
-  }
- }
-
-   if(M5.BtnB.wasPressed()) {
+  if(M5.BtnA.wasReleased()) {
+    SendCommand(ON, 0);
     LogDebug("buttona");
+    menueUpdate(1);
+    M5.Axp.SetLDOEnable(3,true);
+    vTaskDelay(300);
+    M5.Axp.SetLDOEnable(3,false);
+   }
+  
+  if(M5.BtnC.wasReleased()) {
+    SendCommand(OFF, 0);
+    menueUpdate(2);
+    LogDebug("buttonc");
+    M5.Axp.SetLDOEnable(3,true);
+    vTaskDelay(300);
+    M5.Axp.SetLDOEnable(3,false);
   }
-
+  }
   delay(100);
 }
 
@@ -315,26 +293,98 @@ void espNowRemoteTask(void *pvParameters)
 
     for(;;)
     {
-
-      outgoingcontrol.esp_rstate = rstate;
-      outgoingcontrol.esp_speed = speed;
-      outgoingcontrol.esp_depth = depth;
-      outgoingcontrol.esp_stroke = stroke;
-      outgoingcontrol.esp_sensation = sensation;
-      outgoingcontrol.esp_pattern = pattern;
-
-      vTaskDelay(500);
+      vTaskDelay(200);
     }
+}
+
+void homescreentask(void *pvParameters)
+{
+for(;;)
+ {
+  if(esp_connect == true){
+
+  if(encoder1.getCount() != enc1){
+    enc1 = encoder1.getCount();
+    speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(encoder1.getCount(),0,Encoder_MAP), -3);
+    SendCommand(SPEED, speed);
+    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
+    M5.Lcd.fillRect(85,S1Pos,200,30,TFT_WHITE);
+    int mm = speed;
+    M5.Lcd.setCursor(95,S1Pos+progheight-5);
+    M5.Lcd.print(mm);
+    M5.Lcd.print(" F/m");
+    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
+  }
+
+  if(encoder2.getCount() != enc2){
+    enc2 = encoder2.getCount();
+    depth = map(constrain(enc2,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
+    SendCommand(DEPTH, depth);
+    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
+    M5.Lcd.fillRect(85,S2Pos,200,30,TFT_WHITE);
+    int mm = depth;
+    M5.Lcd.setCursor(95,S2Pos+progheight-5);
+    M5.Lcd.print(mm);
+    M5.Lcd.print(" mm");
+    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
+  }
+
+  if(encoder3.getCount() != enc3){
+    enc3 = encoder3.getCount();
+    stroke = map(constrain(encoder3.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
+    SendCommand(STROKE, stroke);
+    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
+    M5.Lcd.fillRect(85,S3Pos,200,30,TFT_WHITE);
+    int mm = stroke;
+    M5.Lcd.setCursor(95,S3Pos+progheight-5);
+    M5.Lcd.print(mm);
+    M5.Lcd.print(" mm");
+    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
+  }
+
+  if(encoder4.getCount() != enc4){
+    enc4 = encoder4.getCount();
+    sensation = map(constrain(encoder4.getCount(),0,Encoder_MAP),0,Encoder_MAP,-100,100);
+    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
+    SendCommand(SENSATION, sensation);
+  }
+  
+}
+vTaskDelay(100);
+} 
+}
+
+void vibrationTask(void *pvParameters)
+{
+for(;;)
+  {
+    vTaskDelay(300); 
+  }
 }
 
 void menueUpdate(int select){
   M5.Lcd.setCursor(0,displayheight-5);
   M5.Lcd.setTextPadding(displaywidth);
   switch(select){
+    case 0:
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.setTextPadding(displaywidth);
+    M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.setCursor(10,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print("Connect");
+    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print("Menu");
+    M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.print("Stop");
+    break;
     case 1:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
     M5.Lcd.setTextPadding(displaywidth);
     M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.fillRect(0,displayheight-5,displaywidth,distheight-4, FrontColor);
     M5.Lcd.setCursor(20,displayheight-5);
     M5.Lcd.setTextColor(TFT_BLACK);
     M5.Lcd.print("Start");
@@ -393,4 +443,21 @@ void drawdisplay(){
   M5.Lcd.setCursor(5,S4Pos+progheight-5);
   M5.Lcd.print("Sensation:");
   M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+}
+
+void connectbtn(){
+    LogDebug("Connect Button");
+    m5.lcd.clear();
+    drawdisplay();
+    menueUpdate(2);
+    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
+    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
+    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
+    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
+    outgoingcontrol.esp_connected = false;
+    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    LogDebug(result);
+    M5.Axp.SetLDOEnable(3,true);
+    vTaskDelay(300);
+    M5.Axp.SetLDOEnable(3,false);
 }
