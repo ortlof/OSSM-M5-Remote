@@ -39,7 +39,15 @@
 #define OFF 0.0
 #define ON 1.0
 
+// Menü States
 
+#define CONNECT 0
+#define HOME 1
+#define MENUE 2
+
+int menuestatus = CONNECT;
+
+// Command States
 #define SPEED 1
 #define DEPTH 2
 #define STROKE 3
@@ -128,8 +136,9 @@ void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
 void vibrationTask(void *pvParameters); // Handels the EspNow Remote
 void homescreentask(void *pvParameters); // Handels the Homescreen
 void menueUpdate(int select); //Handels update of Menue
-void drawdisplay(); //Handels Display Drawing
+void drawdisplay(int display); //Handels Display Drawing
 void connectbtn(); //Handels Connectbtn
+void menue_state_machine(int menuestate);
 
 void powerBar(int x, int y, int w, int h, uint8_t val) {
   M5.lcd.drawRect(x, y, w, h, FrontColor);
@@ -157,6 +166,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       outgoingcontrol.esp_connected = true;
       M5.Lcd.setCursor(5,20);
       M5.Lcd.setFont(&FreeSansBold9pt7b);
+      M5.Lcd.setTextColor(FrontColor);
       M5.Lcd.print("CON");
       menueUpdate(2);
       delay(200);
@@ -224,7 +234,7 @@ void setup(){
   S2Pos = S3Pos - progheight - distheight;
   S1Pos = S2Pos - progheight - distheight;
 
-  drawdisplay();
+  drawdisplay(HOME);
   menueUpdate(0);
   powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
   powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
@@ -236,31 +246,54 @@ void setup(){
 
 void loop()
 {
-    M5.update();
-    if(esp_connect == false){
-    if(M5.BtnA.wasReleased()) {
-    connectbtn();
-    delay(500);
-    }
+     M5.update();
+     //TouchPoint_t coordinate;
+     //coordinate = M5.Touch.getPressPoint();
+     //Serial.printf("x:%d, y:%d \r\n", coordinate.x, coordinate.y);
+     switch(menuestatus){
+      case CONNECT:
+      if(M5.BtnC.wasReleased()) {
+      connectbtn();
+      menuestatus = HOME;
+      delay(100);
+      }
+      break;
+      
+      case HOME:
+      if(M5.BtnA.wasReleased()) {
+      SendCommand(ON, 0);
+      menueUpdate(1);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
 
-  if(M5.BtnA.wasReleased()) {
-    SendCommand(ON, 0);
-    LogDebug("buttona");
-    menueUpdate(1);
-    M5.Axp.SetLDOEnable(3,true);
-    vTaskDelay(300);
-    M5.Axp.SetLDOEnable(3,false);
-   }
+      if(M5.BtnB.wasReleased()) {
+      menue_state_machine(MENUE);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
   
-  if(M5.BtnC.wasReleased()) {
-    SendCommand(OFF, 0);
-    menueUpdate(2);
-    LogDebug("buttonc");
-    M5.Axp.SetLDOEnable(3,true);
-    vTaskDelay(300);
-    M5.Axp.SetLDOEnable(3,false);
-  }
-  }
+      if(M5.BtnC.wasReleased()) {
+      SendCommand(OFF, 0);
+      menueUpdate(2);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
+      break;
+
+      case MENUE:
+
+      if(M5.BtnB.wasReleased()) {
+      menue_state_machine(HOME);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
+      break;
+      }
   delay(100);
 }
 
@@ -302,6 +335,7 @@ void homescreentask(void *pvParameters)
 for(;;)
  {
   if(esp_connect == true){
+  M5.Lcd.setTextColor(FrontColor);
 
   if(encoder1.getCount() != enc1){
     enc1 = encoder1.getCount();
@@ -331,7 +365,7 @@ for(;;)
 
   if(encoder3.getCount() != enc3){
     enc3 = encoder3.getCount();
-    stroke = map(constrain(encoder3.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
+    stroke = map(constrain(encoder3.getCount(),0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
     SendCommand(STROKE, stroke);
     M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
     M5.Lcd.fillRect(85,S3Pos,200,30,TFT_WHITE);
@@ -372,19 +406,18 @@ void menueUpdate(int select){
     M5.Lcd.setFont(&FreeSansBold12pt7b);
     M5.Lcd.setCursor(10,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Connect");
+    M5.Lcd.print("");
     M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
     M5.Lcd.print("Menu");
     M5.Lcd.setTextColor(TFT_BLACK);
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.print("Stop");
+    M5.Lcd.setCursor(displaywidth-110,displayheight-5);
+    M5.Lcd.print("Connect");
     break;
     case 1:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
     M5.Lcd.setTextPadding(displaywidth);
     M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.fillRect(0,displayheight-5,displaywidth,distheight-4, FrontColor);
     M5.Lcd.setCursor(20,displayheight-5);
     M5.Lcd.setTextColor(TFT_BLACK);
     M5.Lcd.print("Start");
@@ -409,55 +442,114 @@ void menueUpdate(int select){
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
     M5.Lcd.print("Stop");
     break;
+    case 3:
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.setTextPadding(displaywidth);
+    M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.setCursor(20,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print("");
+    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print("Home");
+    M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.print("");
+    break;
   }
 
 }
 
-void drawdisplay(){
-  M5.lcd.clearDisplay();
-  M5.Lcd.fillScreen(BgColor);
-  M5.Lcd.setTextColor(TextColor);
-  M5.Lcd.setTextSize(1);
-  M5.Lcd.setCursor(80,20);
-  M5.Lcd.setFont(&FreeSansBold12pt7b);
-  M5.Lcd.print("OSSM Remote");
-  M5.Lcd.setTextColor(TextColor);
-  M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-  M5.Lcd.setCursor(5,S1Pos+progheight-5);
-  M5.Lcd.print("Speed:");
-  M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-  M5.Lcd.setCursor(5,S2Pos+progheight-5);
-  M5.Lcd.print("Depth:");
-  int mm = depth;
-  M5.Lcd.setCursor(95,S2Pos+progheight-5);
-  M5.Lcd.print(mm);
-  M5.Lcd.print(" mm");
-  M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-  M5.Lcd.setCursor(5,S3Pos+progheight-5);
-  M5.Lcd.print("Stroke:");
-  mm = stroke;
-  M5.Lcd.setCursor(95,S3Pos+progheight-5);
-  M5.Lcd.print(mm);
-  M5.Lcd.print(" mm");
-  M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-  M5.Lcd.setCursor(5,S4Pos+progheight-5);
-  M5.Lcd.print("Sensation:");
-  M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+void drawdisplay(int display){
+  switch (display){
+    case HOME:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(80,20);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print("Speed:");
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print("Depth:");
+      int mm = depth;
+      M5.Lcd.setCursor(95,S2Pos+progheight-5);
+      M5.Lcd.print(mm);
+      M5.Lcd.print(" mm");
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print("Stroke:");
+      mm = stroke;
+      M5.Lcd.setCursor(95,S3Pos+progheight-5);
+      M5.Lcd.print(mm);
+      M5.Lcd.print(" mm");
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print("Sensation:");
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
+    case MENUE:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(80,20);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print("Setup Depth Interactively");
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print("Setup Depth Fancy");
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print("Select Pattern");
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
+  }
 }
 
 void connectbtn(){
     LogDebug("Connect Button");
     m5.lcd.clear();
-    drawdisplay();
-    menueUpdate(2);
-    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
+    menue_state_machine(HOME);
     outgoingcontrol.esp_connected = false;
     esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     LogDebug(result);
     M5.Axp.SetLDOEnable(3,true);
     vTaskDelay(300);
     M5.Axp.SetLDOEnable(3,false);
+}
+
+void menue_state_machine(int menuestate){
+  switch (menuestate) {
+    case HOME:
+    drawdisplay(1);
+    menueUpdate(2);
+    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
+    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
+    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
+    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
+    vTaskResume(home_t);
+    menuestatus = HOME;
+    break;
+    case MENUE:
+    vTaskSuspend(home_t);
+    menuestatus = MENUE;
+    drawdisplay(2);
+    menueUpdate(3);
+    break;
+}
 }
