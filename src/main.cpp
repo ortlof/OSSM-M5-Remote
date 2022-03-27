@@ -21,15 +21,23 @@
 #define LogDebugFormatted(...) ((void)0)
 #endif
 
-#define ENC_1_CLK 26
-#define ENC_1_DT 25
+
+
+#define ENC_1_CLK 25
+#define ENC_1_DT 26
+
 #define ENC_2_CLK 13
 #define ENC_2_DT 14
-#define ENC_3_CLK 27
-#define ENC_3_DT 19
-#define ENC_4_CLK 32
-#define ENC_4_DT 33
+
+#define ENC_3_CLK 33
+#define ENC_3_DT 32
+
+#define ENC_4_CLK 19
+#define ENC_4_DT 27
 #define Button 35
+#define ENCBUTTON1 38
+#define ENCBUTTON2 18 
+#define ANALOGIN 36 
 
 #define Encoder_MAP 84
 #define TextColor  TFT_PURPLE
@@ -44,6 +52,7 @@
 #define CONNECT 0
 #define HOME 1
 #define MENUE 2
+#define PATTERN_MENUE 3
 
 int menuestatus = CONNECT;
 
@@ -56,6 +65,9 @@ int menuestatus = CONNECT;
 #define TORQE 6
 #define OFF 10
 #define ON   11
+#define SETUP_D_I 12
+#define SETUP_D_I_F 13
+#define REBOOT 14
 
 int displaywidth;
 int displayheight;
@@ -137,8 +149,10 @@ void vibrationTask(void *pvParameters); // Handels the EspNow Remote
 void homescreentask(void *pvParameters); // Handels the Homescreen
 void menueUpdate(int select); //Handels update of Menue
 void drawdisplay(int display); //Handels Display Drawing
-void connectbtn(); //Handels Connectbtn
+bool connectbtn(); //Handels Connectbtn
 void menue_state_machine(int menuestate);
+void updatepowerbars();
+int64_t touchmenue();
 
 void powerBar(int x, int y, int w, int h, uint8_t val) {
   M5.lcd.drawRect(x, y, w, h, FrontColor);
@@ -168,6 +182,9 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       M5.Lcd.setFont(&FreeSansBold9pt7b);
       M5.Lcd.setTextColor(FrontColor);
       M5.Lcd.print("CON");
+      M5.Lcd.fillScreen(WHITE);
+      menue_state_machine(HOME);
+      menuestatus = HOME;
       menueUpdate(2);
       delay(200);
       vTaskResume(home_t);
@@ -177,6 +194,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 //Sends Commands and Value to Remote device returns ture or false if sended
 bool SendCommand(int Command, float Value){
+      if(esp_connect == true){
       outgoingcontrol.esp_connected = true;
       outgoingcontrol.esp_command = Command;
       outgoingcontrol.esp_value = Value;
@@ -185,6 +203,7 @@ bool SendCommand(int Command, float Value){
       return true;
       } else {
       return false;
+      }
       }
 }
 
@@ -225,7 +244,9 @@ void setup(){
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
   encoder4.attachHalfQuad(ENC_4_CLK, ENC_4_DT);
-  pinMode(Button, INPUT_PULLDOWN);
+  pinMode(Button, INPUT);
+  pinMode(ENCBUTTON1, INPUT);
+  pinMode(ENCBUTTON2, INPUT);
   displaywidth = M5.Lcd.width();
   displayheight = M5.Lcd.height();
 
@@ -247,14 +268,22 @@ void setup(){
 void loop()
 {
      M5.update();
-     //TouchPoint_t coordinate;
-     //coordinate = M5.Touch.getPressPoint();
-     //Serial.printf("x:%d, y:%d \r\n", coordinate.x, coordinate.y);
+     //LogDebug(digitalRead(Button));
+     //LogDebug(digitalRead(ENCBUTTON1));
+     //LogDebug(digitalRead(ENCBUTTON2));
+     //LogDebug(analogReadMilliVolts(ANALOGIN));
+     //LogDebug(M5.Axp.GetBatVoltage());
      switch(menuestatus){
       case CONNECT:
       if(M5.BtnC.wasReleased()) {
-      connectbtn();
-      menuestatus = HOME;
+      outgoingcontrol.esp_connected = false;
+      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      delay(100);
+      }
+      if(M5.BtnA.wasReleased()) {
       delay(100);
       }
       break;
@@ -262,6 +291,19 @@ void loop()
       case HOME:
       if(M5.BtnA.wasReleased()) {
       SendCommand(ON, 0);
+      enc1 = encoder1.getCount();
+      speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(encoder1.getCount(),0,Encoder_MAP), -3);
+      SendCommand(SPEED, speed);
+      enc2 = encoder2.getCount();
+      depth = map(constrain(enc2,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
+      SendCommand(DEPTH, depth);
+      enc3 = encoder3.getCount();
+      stroke = map(constrain(encoder3.getCount(),0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
+      SendCommand(STROKE, stroke);
+      enc4 = encoder4.getCount();
+      sensation = map(constrain(encoder4.getCount(),0,Encoder_MAP),0,Encoder_MAP,-100,100);
+      SendCommand(SENSATION, sensation);
+      
       menueUpdate(1);
       M5.Axp.SetLDOEnable(3,true);
       vTaskDelay(300);
@@ -285,12 +327,91 @@ void loop()
       break;
 
       case MENUE:
+     {
+      switch(touchmenue()){
+        case 1:
+        menue_state_machine(HOME);
+        SendCommand(SETUP_D_I, 0);
+        updatepowerbars();
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 2:
+        menue_state_machine(HOME);
+        SendCommand(SETUP_D_I_F, 0);
+        updatepowerbars();
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 3:
+        menue_state_machine(PATTERN_MENUE);
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 4:
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        SendCommand(REBOOT,0);
+        ESP.restart();
+        break;
+      }
 
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(HOME);
       M5.Axp.SetLDOEnable(3,true);
       vTaskDelay(300);
       M5.Axp.SetLDOEnable(3,false);
+      }
+     }
+      break;
+      case PATTERN_MENUE:
+      { 
+      
+      switch(touchmenue()){
+        case 1:
+        SendCommand(PATTERN, 0);
+        menue_state_machine(HOME);
+        updatepowerbars();
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 2:
+        SendCommand(PATTERN, 6);
+        menue_state_machine(HOME);
+        updatepowerbars();
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 3:
+        SendCommand(PATTERN, 4);
+        menue_state_machine(HOME);
+        updatepowerbars();
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 4:
+        SendCommand(PATTERN, 8);
+        menue_state_machine(HOME);
+        updatepowerbars();
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+      }
+
+      if(M5.BtnB.wasReleased()) {
+      menue_state_machine(HOME);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
       }
       break;
       }
@@ -336,53 +457,33 @@ for(;;)
  {
   if(esp_connect == true){
   M5.Lcd.setTextColor(FrontColor);
-
   if(encoder1.getCount() != enc1){
     enc1 = encoder1.getCount();
     speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(encoder1.getCount(),0,Encoder_MAP), -3);
+    updatepowerbars();
     SendCommand(SPEED, speed);
-    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-    M5.Lcd.fillRect(85,S1Pos,200,30,TFT_WHITE);
-    int mm = speed;
-    M5.Lcd.setCursor(95,S1Pos+progheight-5);
-    M5.Lcd.print(mm);
-    M5.Lcd.print(" F/m");
-    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
   }
 
   if(encoder2.getCount() != enc2){
     enc2 = encoder2.getCount();
     depth = map(constrain(enc2,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
+    updatepowerbars();
     SendCommand(DEPTH, depth);
-    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-    M5.Lcd.fillRect(85,S2Pos,200,30,TFT_WHITE);
-    int mm = depth;
-    M5.Lcd.setCursor(95,S2Pos+progheight-5);
-    M5.Lcd.print(mm);
-    M5.Lcd.print(" mm");
-    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
   }
 
   if(encoder3.getCount() != enc3){
     enc3 = encoder3.getCount();
     stroke = map(constrain(encoder3.getCount(),0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
+    updatepowerbars();
     SendCommand(STROKE, stroke);
-    M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-    M5.Lcd.fillRect(85,S3Pos,200,30,TFT_WHITE);
-    int mm = stroke;
-    M5.Lcd.setCursor(95,S3Pos+progheight-5);
-    M5.Lcd.print(mm);
-    M5.Lcd.print(" mm");
-    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
   }
 
   if(encoder4.getCount() != enc4){
     enc4 = encoder4.getCount();
     sensation = map(constrain(encoder4.getCount(),0,Encoder_MAP),0,Encoder_MAP,-100,100);
-    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
+    updatepowerbars();
     SendCommand(SENSATION, sensation);
   }
-  
 }
 vTaskDelay(100);
 } 
@@ -515,28 +616,43 @@ void drawdisplay(int display){
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
       M5.Lcd.print("Select Pattern");
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print("Restart");
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
+    case PATTERN_MENUE:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(80,20);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.print("OSSM Patterns");
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print("SimpleStroke");
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print("Insist");
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print("Deeper");
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print("StrokeNibbler");
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
   }
 }
 
-void connectbtn(){
-    LogDebug("Connect Button");
-    m5.lcd.clear();
-    menue_state_machine(HOME);
-    outgoingcontrol.esp_connected = false;
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-    LogDebug(result);
-    M5.Axp.SetLDOEnable(3,true);
-    vTaskDelay(300);
-    M5.Axp.SetLDOEnable(3,false);
-}
-
 void menue_state_machine(int menuestate){
   switch (menuestate) {
     case HOME:
-    drawdisplay(1);
+    drawdisplay(HOME);
     menueUpdate(2);
     powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
     powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
@@ -548,8 +664,54 @@ void menue_state_machine(int menuestate){
     case MENUE:
     vTaskSuspend(home_t);
     menuestatus = MENUE;
-    drawdisplay(2);
+    drawdisplay(MENUE);
+    menueUpdate(3);
+    break;
+    case PATTERN_MENUE:
+    vTaskSuspend(home_t);
+    menuestatus = PATTERN_MENUE;
+    drawdisplay(PATTERN_MENUE);
     menueUpdate(3);
     break;
 }
+}
+
+void updatepowerbars(){
+  M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
+  M5.Lcd.fillRect(85,S1Pos,85,30,TFT_WHITE);
+  int mms = speed;
+  M5.Lcd.setCursor(95,S1Pos+progheight-5);
+  M5.Lcd.print(mms);
+  M5.Lcd.print(" F/m");
+  powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
+  M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
+  M5.Lcd.fillRect(85,S2Pos,85,30,TFT_WHITE);
+  int mmd = depth;
+  M5.Lcd.setCursor(95,S2Pos+progheight-5);
+  M5.Lcd.print(mmd);
+  M5.Lcd.print(" mm");
+  powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
+  M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
+  M5.Lcd.fillRect(85,S3Pos,85,30,TFT_WHITE);
+  int mmst = stroke;
+  M5.Lcd.setCursor(95,S3Pos+progheight-5);
+  M5.Lcd.print(mmst);
+  M5.Lcd.print(" mm");
+  powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
+  powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
+}
+
+int64_t touchmenue(){
+      TouchPoint_t coordinate;
+      coordinate = M5.Touch.getPressPoint();
+
+      if(coordinate.y >= 60 && coordinate.y <= 110){
+        return 1;
+      } else if(coordinate.y >= 110 && coordinate.y <= 145){
+        return 2;
+      } else if(coordinate.y >= 145 && coordinate.y <= 165){
+        return 3;
+      } else if(coordinate.y >= 165 && coordinate.y <= 195){
+        return 4;
+      }
 }

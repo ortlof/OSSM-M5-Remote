@@ -6,7 +6,8 @@
 	],
 	"settings": {
 		"files.associations": {
-			"functional": "cpp"
+			"functional": "cpp",
+			"istream": "cpp"
 		}
 	}
 }
