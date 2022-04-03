@@ -52,7 +52,9 @@
 #define CONNECT 0
 #define HOME 1
 #define MENUE 2
-#define PATTERN_MENUE 3
+#define MENUE2 3
+#define TORQE 4
+#define PATTERN_MENUE 5
 
 int menuestatus = CONNECT;
 
@@ -62,7 +64,8 @@ int menuestatus = CONNECT;
 #define STROKE 3
 #define SENSATION 4
 #define PATTERN 5
-#define TORQE 6
+#define TORQE_F 6
+#define TORQE_R 7
 #define OFF 10
 #define ON   11
 #define SETUP_D_I 12
@@ -80,10 +83,12 @@ int S4Pos;
 bool rstate = false;
 int pattern = 0;
 
-long enc1 = 0;
-long enc2 = 0;
-long enc3 = 0;
-long enc4 = 0;
+long speedenc = 0;
+long depthenc = 0;
+long strokeenc = 0;
+long sensationenc = 0;
+long torqe_f_enc = 0;
+long torqe_r_enc = 0;
 
 float speed = 0.0;
 float depth = 0.0;
@@ -91,6 +96,8 @@ float stroke = 0.0;
 float sensation = 0.0;
 float maxdepthinmm = 0.0;
 float speedlimit = 0.0;
+float torqe_f = 100.0;
+float torqe_r = -180.0;
 
 ESP32Encoder encoder1;
 ESP32Encoder encoder2;
@@ -144,9 +151,11 @@ esp_now_peer_info_t peerInfo;
 TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
 TaskHandle_t vibrate_t  = nullptr; // Vibration Task
 TaskHandle_t home_t     = nullptr; // Homescreen Task
+TaskHandle_t torqe_t    = nullptr;
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
 void vibrationTask(void *pvParameters); // Handels the EspNow Remote
 void homescreentask(void *pvParameters); // Handels the Homescreen
+void torqescreentask(void *pvParameters); // Handels Torqe Settings Display
 void menueUpdate(int select); //Handels update of Menue
 void drawdisplay(int display); //Handels Display Drawing
 bool connectbtn(); //Handels Connectbtn
@@ -231,6 +240,15 @@ void setup(){
                             0);                  /* pin task to core 0 */
   vTaskSuspend(home_t);
 
+  xTaskCreatePinnedToCore(torqescreentask,     /* Task function. */
+                            "torqescreentask", /* name of task. */
+                            4096,                /* Stack size of task */
+                            NULL,                /* parameter of the task */
+                            1,                   /* priority of the task */
+                            &torqe_t,            /* Task handle to keep track of created task */
+                            0);                  /* pin task to core 0 */
+  vTaskSuspend(torqe_t);
+
   xTaskCreatePinnedToCore(vibrationTask,     /* Task function. */
                             "vibrationTask", /* name of task. */
                             2048,                /* Stack size of task */
@@ -291,17 +309,17 @@ void loop()
       case HOME:
       if(M5.BtnA.wasReleased()) {
       SendCommand(ON, 0);
-      enc1 = encoder1.getCount();
-      speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(encoder1.getCount(),0,Encoder_MAP), -3);
+      speedenc = encoder1.getCount();
+      speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
       SendCommand(SPEED, speed);
-      enc2 = encoder2.getCount();
-      depth = map(constrain(enc2,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
+      depthenc = encoder2.getCount();
+      depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
       SendCommand(DEPTH, depth);
-      enc3 = encoder3.getCount();
-      stroke = map(constrain(encoder3.getCount(),0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
+      strokeenc = encoder3.getCount();
+      stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
       SendCommand(STROKE, stroke);
-      enc4 = encoder4.getCount();
-      sensation = map(constrain(encoder4.getCount(),0,Encoder_MAP),0,Encoder_MAP,-100,100);
+      sensationenc = encoder4.getCount();
+      sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
       SendCommand(SENSATION, sensation);
       
       menueUpdate(1);
@@ -359,6 +377,55 @@ void loop()
         ESP.restart();
         break;
       }
+      
+      if(M5.BtnA.wasReleased()) {
+      
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
+
+      if(M5.BtnB.wasReleased()) {
+      menue_state_machine(HOME);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
+
+      if(M5.BtnC.wasReleased()) {
+      menue_state_machine(MENUE2);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }
+     }
+      break;
+
+    case MENUE2:
+     {
+      switch(touchmenue()){
+        case 1:
+        menue_state_machine(TORQE);
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 2:
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 3:
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+        case 4:
+        M5.Axp.SetLDOEnable(3,true);
+        vTaskDelay(300);
+        M5.Axp.SetLDOEnable(3,false);
+        break;
+      }
 
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(HOME);
@@ -367,6 +434,16 @@ void loop()
       M5.Axp.SetLDOEnable(3,false);
       }
      }
+      break;
+      case TORQE:
+      {
+      if(M5.BtnB.wasReleased()) {
+      menue_state_machine(HOME);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      }  
+      }
       break;
       case PATTERN_MENUE:
       { 
@@ -457,36 +534,63 @@ for(;;)
  {
   if(esp_connect == true){
   M5.Lcd.setTextColor(FrontColor);
-  if(encoder1.getCount() != enc1){
-    enc1 = encoder1.getCount();
-    speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(encoder1.getCount(),0,Encoder_MAP), -3);
+  if(encoder1.getCount() != speedenc){
+    speedenc = encoder1.getCount();
+    speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
     updatepowerbars();
     SendCommand(SPEED, speed);
   }
-
-  if(encoder2.getCount() != enc2){
-    enc2 = encoder2.getCount();
-    depth = map(constrain(enc2,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
+  if(encoder2.getCount() != depthenc){
+    depthenc = encoder2.getCount();
+    depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
     updatepowerbars();
     SendCommand(DEPTH, depth);
   }
-
-  if(encoder3.getCount() != enc3){
-    enc3 = encoder3.getCount();
-    stroke = map(constrain(encoder3.getCount(),0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
+  if(encoder3.getCount() != strokeenc){
+    strokeenc = encoder3.getCount();
+    stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
     updatepowerbars();
     SendCommand(STROKE, stroke);
   }
 
-  if(encoder4.getCount() != enc4){
-    enc4 = encoder4.getCount();
-    sensation = map(constrain(encoder4.getCount(),0,Encoder_MAP),0,Encoder_MAP,-100,100);
+
+  if(encoder4.getCount() != sensationenc){
+    sensationenc = encoder4.getCount();
+    sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
     updatepowerbars();
     SendCommand(SENSATION, sensation);
   }
 }
 vTaskDelay(100);
 } 
+}
+
+void torqescreentask(void *pvParameters)
+{
+  for(;;)
+  {
+  M5.Lcd.setTextColor(FrontColor);
+  if(encoder1.getCount() != torqe_r_enc)
+    {
+    torqe_r_enc = encoder1.getCount();
+    torqe_r = map(constrain(torqe_r_enc,0,Encoder_MAP),0,Encoder_MAP,-200,-50);
+    M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+    M5.Lcd.setCursor(200,S1Pos+progheight-5);
+    M5.Lcd.print(torqe_r);
+    SendCommand(TORQE_R, torqe_r);
+    }
+
+  if(encoder4.getCount() != torqe_f_enc)
+    {
+    torqe_f_enc = encoder4.getCount();
+    torqe_f = map(constrain(torqe_f_enc,0,Encoder_MAP),0,Encoder_MAP,200,20);
+    M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+    M5.Lcd.setCursor(200,S2Pos+progheight-5);
+    M5.Lcd.print(torqe_f);
+    SendCommand(TORQE_F, torqe_f);
+    }
+  vTaskDelay(100);
+  }
 }
 
 void vibrationTask(void *pvParameters)
@@ -554,8 +658,22 @@ void menueUpdate(int select){
     M5.Lcd.setTextColor(FrontColor);
     M5.Lcd.print("Home");
     M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
+    M5.Lcd.print("Menue2");
+    break;
+    case 4:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.setTextPadding(displaywidth);
+    M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.setCursor(20,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
     M5.Lcd.print("");
+    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print("Home");
+    M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
+    M5.Lcd.print("Menue1");
     break;
   }
 
@@ -621,6 +739,62 @@ void drawdisplay(int display){
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
+    case MENUE2:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(80,20);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print("Setup Troqe");
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print("");
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print("");
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print("");
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
+    case TORQE:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(80,20);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print("Out Torqe:");
+      M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+      M5.Lcd.setCursor(200,S1Pos+progheight-5);
+      M5.Lcd.print(torqe_r);
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print("In Torqe:");
+      M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+      M5.Lcd.setCursor(200,S2Pos+progheight-5);
+      M5.Lcd.print(torqe_f);
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print("");
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print("");
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
     case PATTERN_MENUE:
     {
       M5.lcd.clearDisplay();
@@ -658,17 +832,43 @@ void menue_state_machine(int menuestate){
     powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
     powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
     powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
+    encoder1.setCount(speedenc);
+    encoder2.setCount(depthenc);
+    encoder3.setCount(strokeenc);
+    sensationenc = map(sensation, -100,100, 0, Encoder_MAP);
+    encoder4.setCount(sensationenc);
     vTaskResume(home_t);
+    vTaskSuspend(torqe_t);
     menuestatus = HOME;
     break;
     case MENUE:
     vTaskSuspend(home_t);
+    vTaskSuspend(torqe_t);
     menuestatus = MENUE;
     drawdisplay(MENUE);
     menueUpdate(3);
     break;
+    case MENUE2:
+    vTaskSuspend(home_t);
+    vTaskSuspend(torqe_t);
+    menuestatus = MENUE2;
+    drawdisplay(MENUE2);
+    menueUpdate(3);
+    break;
+    case TORQE:
+    vTaskSuspend(home_t);
+    torqe_f_enc = map(torqe_f, 200, 20, 0, Encoder_MAP);
+    torqe_r_enc = map(torqe_r, -200,-50, 0, Encoder_MAP);
+    encoder1.setCount(torqe_r_enc);
+    encoder4.setCount(torqe_f_enc);
+    vTaskResume(torqe_t);
+    menuestatus = TORQE;
+    drawdisplay(TORQE);
+    menueUpdate(3);
+    break;
     case PATTERN_MENUE:
     vTaskSuspend(home_t);
+    vTaskSuspend(torqe_t);
     menuestatus = PATTERN_MENUE;
     drawdisplay(PATTERN_MENUE);
     menueUpdate(3);
