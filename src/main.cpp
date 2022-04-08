@@ -55,6 +55,7 @@
 #define MENUE2 3
 #define TORQE 4
 #define PATTERN_MENUE 5
+#define CUM_MENUE 20
 
 int menuestatus = CONNECT;
 
@@ -71,6 +72,19 @@ int menuestatus = CONNECT;
 #define SETUP_D_I 12
 #define SETUP_D_I_F 13
 #define REBOOT 14
+
+#define CUMSPEED 20
+#define CUMTIME 21
+#define CUMSIZE   22
+#define CUMACCEL  23
+
+// Define Remote Devices 
+
+#define OSSM 1
+uint8_t OSSM_Address[] = {0x34, 0x86, 0x5d, 0x57, 0xf5, 0x84};
+#define CUM 2
+uint8_t CUM_Address[] ={0x34, 0xb4, 0x72, 0x12, 0xab, 0xa0};
+
 
 int displaywidth;
 int displayheight;
@@ -89,6 +103,10 @@ long strokeenc = 0;
 long sensationenc = 0;
 long torqe_f_enc = 0;
 long torqe_r_enc = 0;
+long cum_t_enc = 0;
+long cum_si_enc =0;
+long cum_s_enc = 0;
+long cum_a_enc = 0;
 
 float speed = 0.0;
 float depth = 0.0;
@@ -98,13 +116,15 @@ float maxdepthinmm = 0.0;
 float speedlimit = 0.0;
 float torqe_f = 100.0;
 float torqe_r = -180.0;
+float cum_time = 0.0;
+float cum_speed = 0.0;
+float cum_size = 0.0;
+float cum_accel = 0.0;
 
 ESP32Encoder encoder1;
 ESP32Encoder encoder2;
 ESP32Encoder encoder3;
 ESP32Encoder encoder4;
-
-uint8_t broadcastAddress[] = {0x34, 0x86, 0x5d, 0x57, 0xf5, 0x84};
 
 // Variable to store if sending data was successful
 String success;
@@ -152,10 +172,12 @@ TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
 TaskHandle_t vibrate_t  = nullptr; // Vibration Task
 TaskHandle_t home_t     = nullptr; // Homescreen Task
 TaskHandle_t torqe_t    = nullptr;
+TaskHandle_t cum_t      = nullptr; 
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
 void vibrationTask(void *pvParameters); // Handels the EspNow Remote
 void homescreentask(void *pvParameters); // Handels the Homescreen
 void torqescreentask(void *pvParameters); // Handels Torqe Settings Display
+void cumscreentask(void *pvParameters); // Handels Lube Display
 void menueUpdate(int select); //Handels update of Menue
 void drawdisplay(int display); //Handels Display Drawing
 bool connectbtn(); //Handels Connectbtn
@@ -182,7 +204,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     maxdepthinmm = incomingcontrol.esp_depth;
     pattern = incomingcontrol.esp_pattern;
     outgoingcontrol.esp_connected = false;
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     LogDebug(result);
     if (result == ESP_OK) {
       esp_connect = true;
@@ -202,16 +224,37 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 }
 
 //Sends Commands and Value to Remote device returns ture or false if sended
-bool SendCommand(int Command, float Value){
+bool SendCommand(int Command, float Value, int Target){
       if(esp_connect == true){
+      switch (Target){
+      case OSSM:
+      {
       outgoingcontrol.esp_connected = true;
       outgoingcontrol.esp_command = Command;
       outgoingcontrol.esp_value = Value;
-      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       if (result == ESP_OK) {
       return true;
       } else {
       return false;
+      }
+      }
+      break;
+      case CUM:
+      {
+      outgoingcontrol.esp_connected = true;
+      outgoingcontrol.esp_command = Command;
+      outgoingcontrol.esp_value = Value;
+      LogDebug(Command);
+      LogDebug(Value);
+      esp_err_t result = esp_now_send(CUM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      if (result == ESP_OK) {
+      return true;
+      } else {
+      return false;
+      } 
+      break;
+      }
       }
       }
 }
@@ -258,6 +301,15 @@ void setup(){
                             0);                  /* pin task to core 0 */
   vTaskSuspend(vibrate_t);
 
+  xTaskCreatePinnedToCore(cumscreentask,     /* Task function. */
+                            "cumscreentask", /* name of task. */
+                            4096,                /* Stack size of task */
+                            NULL,                /* parameter of the task */
+                            1,                   /* priority of the task */
+                            &cum_t,            /* Task handle to keep track of created task */
+                            0);                  /* pin task to core 0 */
+  vTaskSuspend(cum_t);
+
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
@@ -295,32 +347,29 @@ void loop()
       case CONNECT:
       if(M5.BtnC.wasReleased()) {
       outgoingcontrol.esp_connected = false;
-      esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       M5.Axp.SetLDOEnable(3,true);
       vTaskDelay(300);
       M5.Axp.SetLDOEnable(3,false);
-      delay(100);
-      }
-      if(M5.BtnA.wasReleased()) {
       delay(100);
       }
       break;
       
       case HOME:
       if(M5.BtnA.wasReleased()) {
-      SendCommand(ON, 0);
+      SendCommand(ON, 0, OSSM);
       speedenc = encoder1.getCount();
       speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
-      SendCommand(SPEED, speed);
+      SendCommand(SPEED, speed, OSSM);
       depthenc = encoder2.getCount();
       depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
-      SendCommand(DEPTH, depth);
+      SendCommand(DEPTH, depth, OSSM);
       strokeenc = encoder3.getCount();
       stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
-      SendCommand(STROKE, stroke);
+      SendCommand(STROKE, stroke, OSSM);
       sensationenc = encoder4.getCount();
       sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
-      SendCommand(SENSATION, sensation);
+      SendCommand(SENSATION, sensation, OSSM);
       
       menueUpdate(1);
       M5.Axp.SetLDOEnable(3,true);
@@ -336,7 +385,7 @@ void loop()
       }
   
       if(M5.BtnC.wasReleased()) {
-      SendCommand(OFF, 0);
+      SendCommand(OFF, 0, OSSM);
       menueUpdate(2);
       M5.Axp.SetLDOEnable(3,true);
       vTaskDelay(300);
@@ -349,7 +398,7 @@ void loop()
       switch(touchmenue()){
         case 1:
         menue_state_machine(HOME);
-        SendCommand(SETUP_D_I, 0);
+        SendCommand(SETUP_D_I, 0, OSSM);
         updatepowerbars();
         M5.Axp.SetLDOEnable(3,true);
         vTaskDelay(300);
@@ -357,7 +406,7 @@ void loop()
         break;
         case 2:
         menue_state_machine(HOME);
-        SendCommand(SETUP_D_I_F, 0);
+        SendCommand(SETUP_D_I_F, 0, OSSM);
         updatepowerbars();
         M5.Axp.SetLDOEnable(3,true);
         vTaskDelay(300);
@@ -373,16 +422,17 @@ void loop()
         M5.Axp.SetLDOEnable(3,true);
         vTaskDelay(300);
         M5.Axp.SetLDOEnable(3,false);
-        SendCommand(REBOOT,0);
+        SendCommand(REBOOT, 0, OSSM);
         ESP.restart();
         break;
       }
       
       if(M5.BtnA.wasReleased()) {
-      
+      menue_state_machine(CUM_MENUE);
       M5.Axp.SetLDOEnable(3,true);
       vTaskDelay(300);
       M5.Axp.SetLDOEnable(3,false);
+      delay(100);
       }
 
       if(M5.BtnB.wasReleased()) {
@@ -450,7 +500,7 @@ void loop()
       
       switch(touchmenue()){
         case 1:
-        SendCommand(PATTERN, 0);
+        SendCommand(PATTERN, 0, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
         M5.Axp.SetLDOEnable(3,true);
@@ -458,7 +508,7 @@ void loop()
         M5.Axp.SetLDOEnable(3,false);
         break;
         case 2:
-        SendCommand(PATTERN, 6);
+        SendCommand(PATTERN, 6, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
         M5.Axp.SetLDOEnable(3,true);
@@ -466,7 +516,7 @@ void loop()
         M5.Axp.SetLDOEnable(3,false);
         break;
         case 3:
-        SendCommand(PATTERN, 4);
+        SendCommand(PATTERN, 4, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
         M5.Axp.SetLDOEnable(3,true);
@@ -474,7 +524,7 @@ void loop()
         M5.Axp.SetLDOEnable(3,false);
         break;
         case 4:
-        SendCommand(PATTERN, 8);
+        SendCommand(PATTERN, 8, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
         M5.Axp.SetLDOEnable(3,true);
@@ -489,6 +539,10 @@ void loop()
       vTaskDelay(300);
       M5.Axp.SetLDOEnable(3,false);
       }
+      }
+      break;
+      case CUM_MENUE:
+      {
       }
       break;
       }
@@ -509,16 +563,21 @@ void espNowRemoteTask(void *pvParameters)
     // get the status of Trasnmitted packet
     esp_now_register_send_cb(OnDataSent);
 
-    // Register peer
-    memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-    peerInfo.channel = 0;  
-    peerInfo.encrypt = false;
-  
-      // Add peer        
-    if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    // register peer
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  // register first peer  
+  memcpy(peerInfo.peer_addr, OSSM_Address, 6);
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
     Serial.println("Failed to add peer");
     return;
-    }
+  }
+  // register second peer  
+  memcpy(peerInfo.peer_addr, CUM_Address, 6);
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer");
+    return;
+  }
     // Register for a callback function that will be called when data is received
     esp_now_register_recv_cb(OnDataRecv);
 
@@ -538,19 +597,19 @@ for(;;)
     speedenc = encoder1.getCount();
     speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
     updatepowerbars();
-    SendCommand(SPEED, speed);
+    SendCommand(SPEED, speed, OSSM);
   }
   if(encoder2.getCount() != depthenc){
     depthenc = encoder2.getCount();
     depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
     updatepowerbars();
-    SendCommand(DEPTH, depth);
+    SendCommand(DEPTH, depth, OSSM);
   }
   if(encoder3.getCount() != strokeenc){
     strokeenc = encoder3.getCount();
     stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
     updatepowerbars();
-    SendCommand(STROKE, stroke);
+    SendCommand(STROKE, stroke, OSSM);
   }
 
 
@@ -558,7 +617,7 @@ for(;;)
     sensationenc = encoder4.getCount();
     sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
     updatepowerbars();
-    SendCommand(SENSATION, sensation);
+    SendCommand(SENSATION, sensation, OSSM);
   }
 }
 vTaskDelay(100);
@@ -577,7 +636,7 @@ void torqescreentask(void *pvParameters)
     M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
     M5.Lcd.setCursor(200,S1Pos+progheight-5);
     M5.Lcd.print(torqe_r);
-    SendCommand(TORQE_R, torqe_r);
+    SendCommand(TORQE_R, torqe_r, OSSM);
     }
 
   if(encoder4.getCount() != torqe_f_enc)
@@ -587,7 +646,55 @@ void torqescreentask(void *pvParameters)
     M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
     M5.Lcd.setCursor(200,S2Pos+progheight-5);
     M5.Lcd.print(torqe_f);
-    SendCommand(TORQE_F, torqe_f);
+    SendCommand(TORQE_F, torqe_f, OSSM);
+    }
+  vTaskDelay(100);
+  }
+}
+
+void cumscreentask(void *pvParameters)
+{
+  for(;;)
+  {
+    M5.Lcd.setTextColor(FrontColor);
+    if(encoder1.getCount() != cum_s_enc)
+    {
+    cum_s_enc = encoder1.getCount();
+    cum_speed = map(constrain(cum_s_enc,0,Encoder_MAP),0,Encoder_MAP,0,20000);
+    M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+    M5.Lcd.setCursor(200,S1Pos+progheight-5);
+    M5.Lcd.print(cum_speed);
+    SendCommand(CUMSPEED, cum_speed, CUM);
+    }
+
+  if(encoder2.getCount() != cum_t_enc)
+    {
+    cum_t_enc = encoder2.getCount();
+    cum_time = map(constrain(cum_t_enc,0,Encoder_MAP),0,Encoder_MAP,0,60);
+    M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+    M5.Lcd.setCursor(200,S2Pos+progheight-5);
+    M5.Lcd.print(cum_time);
+    SendCommand(CUMTIME, cum_time, CUM);
+    }
+
+   if(encoder3.getCount() != cum_si_enc)
+    {
+    cum_si_enc = encoder3.getCount();
+    cum_size = map(constrain(cum_si_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
+    M5.Lcd.fillRect(199,S3Pos,85,30,TFT_WHITE);
+    M5.Lcd.setCursor(200,S3Pos+progheight-5);
+    M5.Lcd.print(cum_size);
+    SendCommand(CUMSIZE, cum_size, CUM);
+    }
+
+   if(encoder4.getCount() != cum_a_enc)
+    {
+    cum_a_enc = encoder4.getCount();
+    cum_accel = map(constrain(cum_a_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
+    M5.Lcd.fillRect(199,S4Pos,85,30,TFT_WHITE);
+    M5.Lcd.setCursor(200,S4Pos+progheight-5);
+    M5.Lcd.print(cum_accel);
+    SendCommand(CUMACCEL, cum_accel, CUM);
     }
   vTaskDelay(100);
   }
@@ -653,13 +760,13 @@ void menueUpdate(int select){
     M5.Lcd.setFont(&FreeSansBold12pt7b);
     M5.Lcd.setCursor(20,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("");
+    M5.Lcd.print("Cum");
     M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
     M5.Lcd.print("Home");
     M5.Lcd.setTextColor(TFT_BLACK);
     M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.print("Menue2");
+    M5.Lcd.print("Men 2");
     break;
     case 4:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
@@ -820,6 +927,37 @@ void drawdisplay(int display){
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
+    case CUM_MENUE:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setCursor(80,20);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print("CUM Speed");
+      M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+      M5.Lcd.setCursor(200,S1Pos+progheight-5);
+      M5.Lcd.print(cum_speed);
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print("CUM Time");
+      M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+      M5.Lcd.setCursor(200,S2Pos+progheight-5);
+      M5.Lcd.print(cum_time);
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print("CUM Size");
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print("Cum Accel");
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
   }
 }
 
@@ -872,6 +1010,16 @@ void menue_state_machine(int menuestate){
     menuestatus = PATTERN_MENUE;
     drawdisplay(PATTERN_MENUE);
     menueUpdate(3);
+    break;
+    case CUM_MENUE:
+    vTaskSuspend(home_t);
+    encoder1.setCount(cum_s_enc);
+    encoder2.setCount(cum_t_enc);
+    encoder3.setCount(cum_si_enc);
+    encoder4.setCount(cum_a_enc);
+    vTaskResume(cum_t);
+    menuestatus = CUM_MENUE;
+    drawdisplay(CUM_MENUE);
     break;
 }
 }
