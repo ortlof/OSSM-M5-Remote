@@ -543,6 +543,12 @@ void loop()
       break;
       case CUM_MENUE:
       {
+      if(M5.BtnB.wasReleased()) {
+      menue_state_machine(HOME);
+      M5.Axp.SetLDOEnable(3,true);
+      vTaskDelay(300);
+      M5.Axp.SetLDOEnable(3,false);
+      } 
       }
       break;
       }
@@ -660,7 +666,7 @@ void cumscreentask(void *pvParameters)
     if(encoder1.getCount() != cum_s_enc)
     {
     cum_s_enc = encoder1.getCount();
-    cum_speed = map(constrain(cum_s_enc,0,Encoder_MAP),0,Encoder_MAP,0,20000);
+    cum_speed = map(constrain(cum_s_enc,0,Encoder_MAP),0,Encoder_MAP,1000,30000);
     M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
     M5.Lcd.setCursor(200,S1Pos+progheight-5);
     M5.Lcd.print(cum_speed);
@@ -680,7 +686,7 @@ void cumscreentask(void *pvParameters)
    if(encoder3.getCount() != cum_si_enc)
     {
     cum_si_enc = encoder3.getCount();
-    cum_size = map(constrain(cum_si_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
+    cum_size = map(constrain(cum_si_enc,0,Encoder_MAP),0,Encoder_MAP,0,40);
     M5.Lcd.fillRect(199,S3Pos,85,30,TFT_WHITE);
     M5.Lcd.setCursor(200,S3Pos+progheight-5);
     M5.Lcd.print(cum_size);
@@ -977,11 +983,13 @@ void menue_state_machine(int menuestate){
     encoder4.setCount(sensationenc);
     vTaskResume(home_t);
     vTaskSuspend(torqe_t);
+    vTaskSuspend(cum_t);
     menuestatus = HOME;
     break;
     case MENUE:
     vTaskSuspend(home_t);
     vTaskSuspend(torqe_t);
+    vTaskSuspend(cum_t);
     menuestatus = MENUE;
     drawdisplay(MENUE);
     menueUpdate(3);
@@ -989,6 +997,7 @@ void menue_state_machine(int menuestate){
     case MENUE2:
     vTaskSuspend(home_t);
     vTaskSuspend(torqe_t);
+    vTaskSuspend(cum_t);
     menuestatus = MENUE2;
     drawdisplay(MENUE2);
     menueUpdate(3);
@@ -1000,6 +1009,7 @@ void menue_state_machine(int menuestate){
     encoder1.setCount(torqe_r_enc);
     encoder4.setCount(torqe_f_enc);
     vTaskResume(torqe_t);
+    vTaskSuspend(cum_t);
     menuestatus = TORQE;
     drawdisplay(TORQE);
     menueUpdate(3);
@@ -1007,6 +1017,7 @@ void menue_state_machine(int menuestate){
     case PATTERN_MENUE:
     vTaskSuspend(home_t);
     vTaskSuspend(torqe_t);
+    vTaskSuspend(cum_t);
     menuestatus = PATTERN_MENUE;
     drawdisplay(PATTERN_MENUE);
     menueUpdate(3);
@@ -1020,6 +1031,7 @@ void menue_state_machine(int menuestate){
     vTaskResume(cum_t);
     menuestatus = CUM_MENUE;
     drawdisplay(CUM_MENUE);
+    menueUpdate(3);
     break;
 }
 }
