@@ -184,6 +184,7 @@ bool connectbtn(); //Handels Connectbtn
 void menue_state_machine(int menuestate);
 void updatepowerbars();
 int64_t touchmenue();
+void vibrate();
 
 void powerBar(int x, int y, int w, int h, uint8_t val) {
   M5.lcd.drawRect(x, y, w, h, FrontColor);
@@ -348,9 +349,7 @@ void loop()
       if(M5.BtnC.wasReleased()) {
       outgoingcontrol.esp_connected = false;
       esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+vibrate();
       delay(100);
       }
       break;
@@ -372,24 +371,18 @@ void loop()
       SendCommand(SENSATION, sensation, OSSM);
       
       menueUpdate(1);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       }
 
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(MENUE);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       }
   
       if(M5.BtnC.wasReleased()) {
       SendCommand(OFF, 0, OSSM);
       menueUpdate(2);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       }
       break;
 
@@ -400,28 +393,21 @@ void loop()
         menue_state_machine(HOME);
         SendCommand(SETUP_D_I, 0, OSSM);
         updatepowerbars();
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 2:
         menue_state_machine(HOME);
         SendCommand(SETUP_D_I_F, 0, OSSM);
         updatepowerbars();
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 3:
         menue_state_machine(PATTERN_MENUE);
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 4:
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
+        LogDebug("Reboot Triggerd");
         SendCommand(REBOOT, 0, OSSM);
         ESP.restart();
         break;
@@ -429,59 +415,42 @@ void loop()
       
       if(M5.BtnA.wasReleased()) {
       menue_state_machine(CUM_MENUE);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       delay(100);
       }
 
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(HOME);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       }
 
       if(M5.BtnC.wasReleased()) {
       menue_state_machine(MENUE2);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
       }
      }
-      break;
+    break;
 
     case MENUE2:
      {
       switch(touchmenue()){
         case 1:
         menue_state_machine(TORQE);
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 2:
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 3:
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 4:
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
       }
 
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(HOME);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       }
      }
       break;
@@ -489,9 +458,7 @@ void loop()
       {
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(HOME);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       }  
       }
       break;
@@ -503,41 +470,31 @@ void loop()
         SendCommand(PATTERN, 0, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 2:
         SendCommand(PATTERN, 6, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 3:
         SendCommand(PATTERN, 4, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
         case 4:
         SendCommand(PATTERN, 8, OSSM);
         menue_state_machine(HOME);
         updatepowerbars();
-        M5.Axp.SetLDOEnable(3,true);
-        vTaskDelay(300);
-        M5.Axp.SetLDOEnable(3,false);
+      vibrate();
         break;
       }
 
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(HOME);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       }
       }
       break;
@@ -545,9 +502,7 @@ void loop()
       {
       if(M5.BtnB.wasReleased()) {
       menue_state_machine(HOME);
-      M5.Axp.SetLDOEnable(3,true);
-      vTaskDelay(300);
-      M5.Axp.SetLDOEnable(3,false);
+      vibrate();
       } 
       }
       break;
@@ -1064,14 +1019,27 @@ void updatepowerbars(){
 int64_t touchmenue(){
       TouchPoint_t coordinate;
       coordinate = M5.Touch.getPressPoint();
+      int touch = constrain(coordinate.y,0,300);
 
-      if(coordinate.y >= 60 && coordinate.y <= 110){
+      if((touch >= 60) && (touch <= 110)){
+        LogDebug("Touch1");
         return 1;
-      } else if(coordinate.y >= 110 && coordinate.y <= 145){
+      } else if((touch >= 110) && (touch <= 145)){
+        LogDebug("Touch2");
         return 2;
-      } else if(coordinate.y >= 145 && coordinate.y <= 165){
+      } else if((touch >= 145) && (touch <= 165)){
+        LogDebug("Touch3");
         return 3;
-      } else if(coordinate.y >= 165 && coordinate.y <= 195){
+      } else if((touch >= 165) && (touch <= 190)){
+        LogDebug("Touch4");
         return 4;
+      } else {
+        return 0;
       }
+}
+
+void vibrate(){
+    M5.Axp.SetLDOEnable(3,true);
+    vTaskDelay(300);
+    M5.Axp.SetLDOEnable(3,false);
 }
