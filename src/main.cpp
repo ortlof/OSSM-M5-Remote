@@ -3,6 +3,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <PatternMath.h>
+#include "OneButton.h"
 
 ///////////////////////////////////////////
 ////
@@ -34,9 +35,9 @@
 
 #define ENC_4_CLK 19
 #define ENC_4_DT 27
-#define Button 35
-#define ENCBUTTON1 38
-#define ENCBUTTON2 18 
+OneButton Button1(35, false);
+OneButton Button2(38, false);
+OneButton Button3(18, false);
 #define ANALOGIN 36 
 
 #define Encoder_MAP 84
@@ -60,6 +61,7 @@
 int menuestatus = CONNECT;
 
 // Command States
+#define CONN 0
 #define SPEED 1
 #define DEPTH 2
 #define STROKE 3
@@ -96,6 +98,7 @@ int S3Pos;
 int S4Pos;
 bool rstate = false;
 int pattern = 0;
+bool onoff = false;
 
 long speedenc = 0;
 long depthenc = 0;
@@ -148,6 +151,7 @@ float incoming_esp_pattern;
 bool incoming_esp_rstate;
 bool incoming_esp_connected;
 
+
 typedef struct struct_message {
   float esp_speed;
   float esp_depth;
@@ -185,6 +189,9 @@ void menue_state_machine(int menuestate);
 void updatepowerbars();
 int64_t touchmenue();
 void vibrate();
+void click1();
+void click2();
+void click3();
 
 void powerBar(int x, int y, int w, int h, uint8_t val) {
   M5.lcd.drawRect(x, y, w, h, FrontColor);
@@ -315,9 +322,9 @@ void setup(){
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
   encoder4.attachHalfQuad(ENC_4_CLK, ENC_4_DT);
-  pinMode(Button, INPUT);
-  pinMode(ENCBUTTON1, INPUT);
-  pinMode(ENCBUTTON2, INPUT);
+  Button1.attachClick(click1);
+  Button2.attachClick(click2);
+  Button3.attachClick(click3);
   displaywidth = M5.Lcd.width();
   displayheight = M5.Lcd.height();
 
@@ -339,7 +346,9 @@ void setup(){
 void loop()
 {
      M5.update();
-     //LogDebug(digitalRead(Button));
+     Button1.tick();
+     Button2.tick();
+     Button3.tick();
      //LogDebug(digitalRead(ENCBUTTON1));
      //LogDebug(digitalRead(ENCBUTTON2));
      //LogDebug(analogReadMilliVolts(ANALOGIN));
@@ -349,14 +358,13 @@ void loop()
       if(M5.BtnC.wasReleased()) {
       outgoingcontrol.esp_connected = false;
       esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-vibrate();
+      vibrate();
       delay(100);
       }
       break;
       
       case HOME:
       if(M5.BtnA.wasReleased()) {
-      SendCommand(ON, 0, OSSM);
       speedenc = encoder1.getCount();
       speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
       SendCommand(SPEED, speed, OSSM);
@@ -369,7 +377,7 @@ vibrate();
       sensationenc = encoder4.getCount();
       sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
       SendCommand(SENSATION, sensation, OSSM);
-      
+      SendCommand(ON, 0, OSSM);
       menueUpdate(1);
       vibrate();
       }
@@ -1043,3 +1051,24 @@ void vibrate(){
     vTaskDelay(300);
     M5.Axp.SetLDOEnable(3,false);
 }
+
+// This function will be called when the button1 was pressed 1 time (and no 2. button press followed).
+void click1() {
+  Serial.println("Button 1 click.");
+         switch(onoff){
+           case true:
+           SendCommand(OFF, 0, OSSM);
+           onoff = false;
+           break;
+           case false:
+           SendCommand(ON, 0, OSSM);
+           onoff = true;
+           break;
+         }
+} // click1
+void click2() {
+  Serial.println("Button 2 click.");
+} // click1
+void click3() {
+  Serial.println("Button 3 click.");
+} // click1
