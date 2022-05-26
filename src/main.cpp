@@ -4,6 +4,7 @@
 #include <WiFi.h>
 #include <PatternMath.h>
 #include "OneButton.h"          //For Button Debounce and Longpress
+#include "config.h"
 
 ///////////////////////////////////////////
 ////
@@ -41,10 +42,6 @@ OneButton Button3(18, false);
 #define ANALOGIN 36 
 
 #define Encoder_MAP 84
-#define TextColor  TFT_PURPLE
-#define BgColor    TFT_WHITE
-#define FrontColor TFT_PURPLE
-
 #define OFF 0.0
 #define ON 1.0
 
@@ -97,7 +94,7 @@ int S2Pos;
 int S3Pos;
 int S4Pos;
 bool rstate = false;
-int pattern = 0;
+int pattern = 1;
 bool onoff = false;
 
 long speedenc = 0;
@@ -110,13 +107,14 @@ long cum_t_enc = 0;
 long cum_si_enc =0;
 long cum_s_enc = 0;
 long cum_a_enc = 0;
+long menue_enc = 0;
 
 float speed = 0.0;
 float depth = 0.0;
 float stroke = 0.0;
 float sensation = 0.0;
-float maxdepthinmm = 0.0;
-float speedlimit = 0.0;
+float maxdepthinmm = 180.0;
+float speedlimit = 1200;
 float torqe_f = 100.0;
 float torqe_r = -180.0;
 float cum_time = 0.0;
@@ -175,11 +173,13 @@ esp_now_peer_info_t peerInfo;
 TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
 TaskHandle_t vibrate_t  = nullptr; // Vibration Task
 TaskHandle_t home_t     = nullptr; // Homescreen Task
+TaskHandle_t menue_t    = nullptr;
 TaskHandle_t torqe_t    = nullptr;
 TaskHandle_t cum_t      = nullptr; 
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
 void vibrationTask(void *pvParameters); // Handels the EspNow Remote
 void homescreentask(void *pvParameters); // Handels the Homescreen
+void menuescreentask(void *pvParameters); // Handels the Menue Screen
 void torqescreentask(void *pvParameters); // Handels Torqe Settings Display
 void cumscreentask(void *pvParameters); // Handels Lube Display
 void menueUpdate(int select); //Handels update of Menue
@@ -189,7 +189,8 @@ void menue_state_machine(int menuestate);
 void updatepowerbars();
 int64_t touchmenue();
 void vibrate();
-void click1();
+void mxclick();
+void mxlong();
 void click2();
 void click3();
 
@@ -220,7 +221,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       M5.Lcd.setCursor(5,20);
       M5.Lcd.setFont(&FreeSansBold9pt7b);
       M5.Lcd.setTextColor(FrontColor);
-      M5.Lcd.print("CON");
+      M5.Lcd.print(T_CON);
       M5.Lcd.fillScreen(WHITE);
       menue_state_machine(HOME);
       menuestatus = HOME;
@@ -291,6 +292,15 @@ void setup(){
                             0);                  /* pin task to core 0 */
   vTaskSuspend(home_t);
 
+  xTaskCreatePinnedToCore(menuescreentask,     /* Task function. */
+                            "menuescreentask", /* name of task. */
+                            4096,                /* Stack size of task */
+                            NULL,                /* parameter of the task */
+                            1,                   /* priority of the task */
+                            &menue_t,            /* Task handle to keep track of created task */
+                            0);                  /* pin task to core 0 */
+  vTaskSuspend(menue_t);
+
   xTaskCreatePinnedToCore(torqescreentask,     /* Task function. */
                             "torqescreentask", /* name of task. */
                             4096,                /* Stack size of task */
@@ -322,7 +332,8 @@ void setup(){
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
   encoder4.attachHalfQuad(ENC_4_CLK, ENC_4_DT);
-  Button1.attachClick(click1);
+  Button1.attachClick(mxclick);
+  Button1.attachLongPressStop(mxlong);
   Button2.attachClick(click2);
   Button3.attachClick(click3);
   displaywidth = M5.Lcd.width();
@@ -355,11 +366,29 @@ void loop()
      //LogDebug(M5.Axp.GetBatVoltage());
      switch(menuestatus){
       case CONNECT:
+      {
       if(M5.BtnC.wasReleased()) {
       outgoingcontrol.esp_connected = false;
       esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       vibrate();
       delay(100);
+      }
+
+      if(M5.BtnA.wasReleased()) {
+      esp_connect = true;
+      outgoingcontrol.esp_connected = true;
+      M5.Lcd.setCursor(5,20);
+      M5.Lcd.setFont(&FreeSansBold9pt7b);
+      M5.Lcd.setTextColor(FrontColor);
+      M5.Lcd.print(T_CON);
+      M5.Lcd.fillScreen(WHITE);
+      menue_state_machine(HOME);
+      menuestatus = HOME;
+      menueUpdate(2);
+      delay(200);
+      vTaskResume(home_t);
+      }
+
       }
       break;
       
@@ -414,10 +443,8 @@ void loop()
       vibrate();
         break;
         case 4:
-      vibrate();
-        LogDebug("Reboot Triggerd");
-        SendCommand(REBOOT, 0, OSSM);
-        ESP.restart();
+        menue_state_machine(TORQE);
+        vibrate();
         break;
       }
       
@@ -442,8 +469,10 @@ void loop()
      {
       switch(touchmenue()){
         case 1:
-        menue_state_machine(TORQE);
-      vibrate();
+        vibrate();
+        LogDebug("Reboot Triggerd");
+        SendCommand(REBOOT, 0, OSSM);
+        ESP.restart();
         break;
         case 2:
       vibrate();
@@ -460,8 +489,13 @@ void loop()
       menue_state_machine(HOME);
       vibrate();
       }
+      if(M5.BtnC.wasReleased()) {
+      menue_state_machine(MENUE);
+      vibrate();
+      }
      }
       break;
+
       case TORQE:
       {
       if(M5.BtnB.wasReleased()) {
@@ -593,6 +627,33 @@ vTaskDelay(100);
 } 
 }
 
+void menuescreentask(void *pvParameters)
+{
+for(;;)
+{
+
+  if(encoder4.getCount() != menue_enc)
+    {
+    menue_enc = encoder4.getCount();
+    switch(menue_enc){
+      case 1:
+      LogDebug("1");
+      break;
+      case 2:
+      LogDebug("2");
+      break;
+      case 3:
+      LogDebug("3");
+      break;
+      case 4:
+      LogDebug("4");
+      break;
+    }
+    }
+  vTaskDelay(300); 
+}
+}
+
 void torqescreentask(void *pvParameters)
 {
   for(;;)
@@ -602,7 +663,7 @@ void torqescreentask(void *pvParameters)
     {
     torqe_r_enc = encoder1.getCount();
     torqe_r = map(constrain(torqe_r_enc,0,Encoder_MAP),0,Encoder_MAP,-200,-50);
-    M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+    M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
     M5.Lcd.setCursor(200,S1Pos+progheight-5);
     M5.Lcd.print(torqe_r);
     SendCommand(TORQE_R, torqe_r, OSSM);
@@ -612,7 +673,7 @@ void torqescreentask(void *pvParameters)
     {
     torqe_f_enc = encoder4.getCount();
     torqe_f = map(constrain(torqe_f_enc,0,Encoder_MAP),0,Encoder_MAP,200,20);
-    M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+    M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
     M5.Lcd.setCursor(200,S2Pos+progheight-5);
     M5.Lcd.print(torqe_f);
     SendCommand(TORQE_F, torqe_f, OSSM);
@@ -630,7 +691,7 @@ void cumscreentask(void *pvParameters)
     {
     cum_s_enc = encoder1.getCount();
     cum_speed = map(constrain(cum_s_enc,0,Encoder_MAP),0,Encoder_MAP,1000,30000);
-    M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+    M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
     M5.Lcd.setCursor(200,S1Pos+progheight-5);
     M5.Lcd.print(cum_speed);
     SendCommand(CUMSPEED, cum_speed, CUM);
@@ -640,7 +701,7 @@ void cumscreentask(void *pvParameters)
     {
     cum_t_enc = encoder2.getCount();
     cum_time = map(constrain(cum_t_enc,0,Encoder_MAP),0,Encoder_MAP,0,60);
-    M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+    M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
     M5.Lcd.setCursor(200,S2Pos+progheight-5);
     M5.Lcd.print(cum_time);
     SendCommand(CUMTIME, cum_time, CUM);
@@ -650,7 +711,7 @@ void cumscreentask(void *pvParameters)
     {
     cum_si_enc = encoder3.getCount();
     cum_size = map(constrain(cum_si_enc,0,Encoder_MAP),0,Encoder_MAP,0,40);
-    M5.Lcd.fillRect(199,S3Pos,85,30,TFT_WHITE);
+    M5.Lcd.fillRect(199,S3Pos,85,30,BgColor);
     M5.Lcd.setCursor(200,S3Pos+progheight-5);
     M5.Lcd.print(cum_size);
     SendCommand(CUMSIZE, cum_size, CUM);
@@ -660,7 +721,7 @@ void cumscreentask(void *pvParameters)
     {
     cum_a_enc = encoder4.getCount();
     cum_accel = map(constrain(cum_a_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
-    M5.Lcd.fillRect(199,S4Pos,85,30,TFT_WHITE);
+    M5.Lcd.fillRect(199,S4Pos,85,30,BgColor);
     M5.Lcd.setCursor(200,S4Pos+progheight-5);
     M5.Lcd.print(cum_accel);
     SendCommand(CUMACCEL, cum_accel, CUM);
@@ -687,27 +748,27 @@ void menueUpdate(int select){
     M5.Lcd.setFont(&FreeSansBold12pt7b);
     M5.Lcd.setCursor(10,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("");
-    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.print(T_BLANK);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_MENUE)*0.5),displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Menu");
-    M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.print(T_MENUE);
+    M5.Lcd.setTextColor(HighlightColor);
     M5.Lcd.setCursor(displaywidth-110,displayheight-5);
-    M5.Lcd.print("Connect");
+    M5.Lcd.print(T_CONNECT);
     break;
     case 1:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
     M5.Lcd.setTextPadding(displaywidth);
     M5.Lcd.setFont(&FreeSansBold12pt7b);
     M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(TFT_BLACK);
-    M5.Lcd.print("Start");
-    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.setTextColor(HighlightColor);
+    M5.Lcd.print(T_START);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_MENUE)*0.5),displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Menu");
+    M5.Lcd.print(T_MENUE);
     M5.Lcd.setTextColor(FrontColor);
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.print("Stop");
+    M5.Lcd.print(T_STOP);
     break;
     case 2:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
@@ -715,13 +776,13 @@ void menueUpdate(int select){
     M5.Lcd.setFont(&FreeSansBold12pt7b);
     M5.Lcd.setCursor(20,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Start");
-    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.print(T_START);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_MENUE)*0.5),displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Menu");
-    M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.print(T_MENUE);
+    M5.Lcd.setTextColor(HighlightColor);
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.print("Stop");
+    M5.Lcd.print(T_STOP);
     break;
     case 3:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
@@ -729,13 +790,14 @@ void menueUpdate(int select){
     M5.Lcd.setFont(&FreeSansBold12pt7b);
     M5.Lcd.setCursor(20,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Cum");
-    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.print(T_CUM);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Home");
-    M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.print(T_HOME);
+    M5.Lcd.setTextColor(FrontColor);
     M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.print("Men 2");
+    M5.Lcd.fillTriangle(305, 235, 295, 215, 315, 215, FrontColor);
+    M5.Lcd.print(T_MEN2);
     break;
     case 4:
     M5.Lcd.setCursor(displaywidth-80,displayheight-5);
@@ -743,13 +805,28 @@ void menueUpdate(int select){
     M5.Lcd.setFont(&FreeSansBold12pt7b);
     M5.Lcd.setCursor(20,displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("");
-    M5.Lcd.setCursor(displaywidth*0.5-35,displayheight-5);
+    M5.Lcd.print(T_CUM);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
     M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print("Home");
-    M5.Lcd.setTextColor(TFT_BLACK);
+    M5.Lcd.print(T_HOME);
+    M5.Lcd.setTextColor(FrontColor);
     M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.print("Menue1");
+    M5.Lcd.fillTriangle(305, 215, 295, 235, 315, 235, FrontColor);
+    M5.Lcd.print(T_MEN1);
+    break;
+    case 5:
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.setTextPadding(displaywidth);
+    M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.setCursor(20,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print(T_BLANK);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print(T_HOME);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
+    M5.Lcd.print(T_BLANK);
     break;
   }
 
@@ -763,30 +840,30 @@ void drawdisplay(int display){
       M5.Lcd.fillScreen(BgColor);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(80,20);
       M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
+      M5.Lcd.print(T_HEADER);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print("Speed:");
+      M5.Lcd.print(T_SPEED);
       M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print("Depth:");
+      M5.Lcd.print(T_DEPTH);
       int mm = depth;
       M5.Lcd.setCursor(95,S2Pos+progheight-5);
       M5.Lcd.print(mm);
-      M5.Lcd.print(" mm");
+      M5.Lcd.print(T_MM);
       M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print("Stroke:");
+      M5.Lcd.print(T_STROKE);
       mm = stroke;
       M5.Lcd.setCursor(95,S3Pos+progheight-5);
       M5.Lcd.print(mm);
-      M5.Lcd.print(" mm");
+      M5.Lcd.print(T_MM);
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print("Sensation:");
+      M5.Lcd.print(T_SENSATION);
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
@@ -796,22 +873,22 @@ void drawdisplay(int display){
       M5.Lcd.fillScreen(BgColor);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(80,20);
       M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
+      M5.Lcd.print(T_HEADER);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print("Setup Depth Interactively");
+      M5.Lcd.print(T_SETUP_DEPTH_I);
       M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print("Setup Depth Fancy");
+      M5.Lcd.print(T_SETUP_DEPTH_F);
       M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print("Select Pattern");
+      M5.Lcd.print(T_SELECT_PATTERN);
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print("Restart");
+      M5.Lcd.print(T_SETUP_TORQE);
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
@@ -821,22 +898,22 @@ void drawdisplay(int display){
       M5.Lcd.fillScreen(BgColor);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(80,20);
       M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
+      M5.Lcd.print(T_HEADER);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print("Setup Troqe");
+      M5.Lcd.print(T_RESTART);
       M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print("");
+      M5.Lcd.print(T_BLANK);
       M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print("");
+      M5.Lcd.print(T_BLANK);
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print("");
+      M5.Lcd.print(T_BLANK);
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
@@ -846,28 +923,28 @@ void drawdisplay(int display){
       M5.Lcd.fillScreen(BgColor);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(80,20);
       M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
+      M5.Lcd.print(T_HEADER);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print("Out Torqe:");
-      M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+      M5.Lcd.print(T_OUT_TORQE);
+      M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
       M5.Lcd.setCursor(200,S1Pos+progheight-5);
       M5.Lcd.print(torqe_r);
       M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print("In Torqe:");
-      M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+      M5.Lcd.print(T_IN_TORQE);
+      M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
       M5.Lcd.setCursor(200,S2Pos+progheight-5);
       M5.Lcd.print(torqe_f);
       M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print("");
+      M5.Lcd.print(T_BLANK);
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print("");
+      M5.Lcd.print(T_BLANK);
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
@@ -877,22 +954,22 @@ void drawdisplay(int display){
       M5.Lcd.fillScreen(BgColor);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(80,20);
       M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.print("OSSM Patterns");
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_Patterns)*0.5),25);
+      M5.Lcd.print(T_Patterns);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print("SimpleStroke");
+      M5.Lcd.print(T_SimpleStroke);
       M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print("Insist");
+      M5.Lcd.print(T_Insist);
       M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print("Deeper");
+      M5.Lcd.print(T_Deeper);
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print("StrokeNibbler");
+      M5.Lcd.print(T_StrokeNibbler);
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
@@ -902,28 +979,28 @@ void drawdisplay(int display){
       M5.Lcd.fillScreen(BgColor);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.setTextSize(1);
-      M5.Lcd.setCursor(80,20);
       M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.print("OSSM Remote");
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
+      M5.Lcd.print(T_HEADER);
       M5.Lcd.setTextColor(TextColor);
       M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print("CUM Speed");
-      M5.Lcd.fillRect(199,S1Pos,85,30,TFT_WHITE);
+      M5.Lcd.print(T_CUM_SPEED);
+      M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
       M5.Lcd.setCursor(200,S1Pos+progheight-5);
       M5.Lcd.print(cum_speed);
       M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print("CUM Time");
-      M5.Lcd.fillRect(199,S2Pos,85,30,TFT_WHITE);
+      M5.Lcd.print(T_CUM_TIME);
+      M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
       M5.Lcd.setCursor(200,S2Pos+progheight-5);
       M5.Lcd.print(cum_time);
       M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print("CUM Size");
+      M5.Lcd.print(T_CUM_Volume);
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print("Cum Accel");
+      M5.Lcd.print(T_CUM_Accel);
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
@@ -963,7 +1040,7 @@ void menue_state_machine(int menuestate){
     vTaskSuspend(cum_t);
     menuestatus = MENUE2;
     drawdisplay(MENUE2);
-    menueUpdate(3);
+    menueUpdate(4);
     break;
     case TORQE:
     vTaskSuspend(home_t);
@@ -975,7 +1052,7 @@ void menue_state_machine(int menuestate){
     vTaskSuspend(cum_t);
     menuestatus = TORQE;
     drawdisplay(TORQE);
-    menueUpdate(3);
+    menueUpdate(5);
     break;
     case PATTERN_MENUE:
     vTaskSuspend(home_t);
@@ -994,32 +1071,32 @@ void menue_state_machine(int menuestate){
     vTaskResume(cum_t);
     menuestatus = CUM_MENUE;
     drawdisplay(CUM_MENUE);
-    menueUpdate(3);
+    menueUpdate(5);
     break;
 }
 }
 
 void updatepowerbars(){
   M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-  M5.Lcd.fillRect(85,S1Pos,85,30,TFT_WHITE);
+  M5.Lcd.fillRect(85,S1Pos,85,30,BgColor);
   int mms = speed;
   M5.Lcd.setCursor(95,S1Pos+progheight-5);
   M5.Lcd.print(mms);
-  M5.Lcd.print(" F/m");
+  M5.Lcd.print(T_FUCKS_MIN);
   powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
   M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-  M5.Lcd.fillRect(85,S2Pos,85,30,TFT_WHITE);
+  M5.Lcd.fillRect(85,S2Pos,85,30,BgColor);
   int mmd = depth;
   M5.Lcd.setCursor(95,S2Pos+progheight-5);
   M5.Lcd.print(mmd);
-  M5.Lcd.print(" mm");
+  M5.Lcd.print(T_MM);
   powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
   M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-  M5.Lcd.fillRect(85,S3Pos,85,30,TFT_WHITE);
+  M5.Lcd.fillRect(85,S3Pos,85,30,BgColor);
   int mmst = stroke;
   M5.Lcd.setCursor(95,S3Pos+progheight-5);
   M5.Lcd.print(mmst);
-  M5.Lcd.print(" mm");
+  M5.Lcd.print(T_MM);
   powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
   powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
 }
@@ -1052,20 +1129,31 @@ void vibrate(){
     M5.Axp.SetLDOEnable(3,false);
 }
 
-// This function will be called when the button1 was pressed 1 time (and no 2. button press followed).
-void click1() {
-  Serial.println("Button 1 click.");
+
+void mxclick() {
+  Serial.println("MX click.");
          switch(onoff){
            case true:
            SendCommand(OFF, 0, OSSM);
+           if(menuestatus == HOME){
+             menueUpdate(2);
+           }
            onoff = false;
            break;
            case false:
            SendCommand(ON, 0, OSSM);
+           if(menuestatus == HOME){
+             menueUpdate(1);
+           }
            onoff = true;
            break;
          }
-} // click1
+} 
+void mxlong(){
+  Serial.println("MX Long click.");
+  menue_state_machine(MENUE);
+  vibrate();
+} 
 void click2() {
   Serial.println("Button 2 click.");
 } // click1
