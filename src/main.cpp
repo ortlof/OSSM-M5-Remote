@@ -77,12 +77,7 @@ int menuestatus = CONNECT;
 #define CUMSIZE   22
 #define CUMACCEL  23
 
-// Define Remote Devices 
 
-#define OSSM 1
-uint8_t OSSM_Address[] = {0x34, 0x86, 0x5d, 0x57, 0xf5, 0x84};
-#define CUM 2
-uint8_t CUM_Address[] ={0x34, 0xb4, 0x72, 0x12, 0xab, 0xa0};
 
 
 int displaywidth;
