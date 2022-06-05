@@ -1,3 +1,12 @@
+// Define Remote Devices MAC Adress
+
+#define OSSM 1
+
+uint8_t OSSM_Address[] = {0x40, 0x91, 0x51, 0xBB, 0xCC, 0x88};
+#define CUM 2
+uint8_t CUM_Address[] ={0x34, 0xb4, 0x72, 0x12, 0xab, 0xa0};
+
+
 // Color 
 #define TextColor  TFT_PURPLE
 #define BgColor    TFT_WHITE
