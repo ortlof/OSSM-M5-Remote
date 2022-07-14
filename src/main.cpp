@@ -23,25 +23,6 @@
 #define LogDebugFormatted(...) ((void)0)
 #endif
 
-
-
-#define ENC_1_CLK 25
-#define ENC_1_DT 26
-
-#define ENC_2_CLK 13
-#define ENC_2_DT 14
-
-#define ENC_3_CLK 33
-#define ENC_3_DT 32
-
-#define ENC_4_CLK 19
-#define ENC_4_DT 27
-OneButton Button1(35, false);
-OneButton Button2(38, false);
-OneButton Button3(18, false);
-#define ANALOGIN 36 
-
-#define Encoder_MAP 84
 #define OFF 0.0
 #define ON 1.0
 
