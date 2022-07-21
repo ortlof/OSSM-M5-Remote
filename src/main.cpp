@@ -5,6 +5,9 @@
 #include <PatternMath.h>
 #include "OneButton.h"          //For Button Debounce and Longpress
 #include "config.h"
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
 
 ///////////////////////////////////////////
 ////
