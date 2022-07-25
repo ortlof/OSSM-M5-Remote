@@ -34,6 +34,8 @@
 #define MENUE2 3
 #define TORQE 4
 #define PATTERN_MENUE 5
+#define PATTERN_MENUE2 6
+#define PATTERN_MENUE3 7
 #define CUM_MENUE 20
 
 int menuestatus = CONNECT;
@@ -485,34 +487,109 @@ void loop()
       
       switch(touchmenue()){
         case 1:
-        SendCommand(PATTERN, 0, OSSM);
-        menue_state_machine(HOME);
-        updatepowerbars();
-      vibrate();
-        break;
+          SendCommand(PATTERN, 0, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
         case 2:
-        SendCommand(PATTERN, 6, OSSM);
-        menue_state_machine(HOME);
-        updatepowerbars();
-      vibrate();
-        break;
+          SendCommand(PATTERN, 2, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
         case 3:
-        SendCommand(PATTERN, 4, OSSM);
-        menue_state_machine(HOME);
-        updatepowerbars();
-      vibrate();
-        break;
+          SendCommand(PATTERN, 1, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
         case 4:
-        SendCommand(PATTERN, 8, OSSM);
-        menue_state_machine(HOME);
-        updatepowerbars();
-      vibrate();
-        break;
+          SendCommand(PATTERN, 3, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
       }
 
       if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
+        menue_state_machine(HOME);
+        vibrate();
+      }
+      if(M5.BtnC.wasReleased()) {
+        menue_state_machine(PATTERN_MENUE2);
+        vibrate();
+      }
+      }
+      break;
+      case PATTERN_MENUE2:
+      {
+      switch(touchmenue()){
+        case 1:
+          SendCommand(PATTERN, 5, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
+        case 2:
+          SendCommand(PATTERN, 6, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
+        case 3:
+          SendCommand(PATTERN, 4, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
+        case 4:
+          SendCommand(PATTERN, 8, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
+      }
+      if(M5.BtnA.wasReleased()) {
+        menue_state_machine(PATTERN_MENUE);
+        vibrate();
+      }
+      if(M5.BtnB.wasReleased()) {
+        menue_state_machine(HOME);
+        vibrate();
+      }
+      if(M5.BtnC.wasReleased()) {
+        menue_state_machine(PATTERN_MENUE3);
+        vibrate();
+      }
+      }
+      break;
+      case PATTERN_MENUE3:
+      { 
+      switch(touchmenue()){
+        case 1:
+          SendCommand(PATTERN, 7, OSSM);
+          menue_state_machine(HOME);
+          updatepowerbars();
+          vibrate();
+          break;
+        case 2:
+          vibrate();
+          break;
+        case 3:
+          vibrate();
+          break;
+        case 4:
+          vibrate();
+          break;
+      }
+      if(M5.BtnA.wasReleased()) {
+        menue_state_machine(PATTERN_MENUE2);
+        vibrate();
+      }
+      if(M5.BtnB.wasReleased()) {
+        menue_state_machine(HOME);
+        vibrate();
       }
       }
       break;
@@ -804,6 +881,52 @@ void menueUpdate(int select){
     M5.Lcd.setCursor(displaywidth-90,displayheight-5);
     M5.Lcd.print(T_BLANK);
     break;
+    case 6:
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.setTextPadding(displaywidth);
+    M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.setCursor(20,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print(T_BLANK);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print(T_HOME);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
+    M5.Lcd.fillTriangle(305, 235, 295, 215, 315, 215, FrontColor);
+    M5.Lcd.print(T_MEN2);
+    break;
+    case 7:
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.setTextPadding(displaywidth);
+    M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.setCursor(20,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.fillTriangle(10, 215, 0, 235, 20, 235, FrontColor);
+    M5.Lcd.print(T_MEN1);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print(T_HOME);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
+    M5.Lcd.fillTriangle(305, 235, 295, 215, 315, 215, FrontColor);
+    M5.Lcd.print(T_MEN2);
+    break;
+    case 8:
+    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
+    M5.Lcd.setTextPadding(displaywidth);
+    M5.Lcd.setFont(&FreeSansBold12pt7b);
+    M5.Lcd.setCursor(20,displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.fillTriangle(10, 215, 0, 235, 20, 235, FrontColor);
+    M5.Lcd.print(T_MEN1);
+    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.print(T_HOME);
+    M5.Lcd.setTextColor(FrontColor);
+    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
+    M5.Lcd.print(T_BLANK);
+    break;
   }
 
 }
@@ -939,6 +1062,31 @@ void drawdisplay(int display){
       M5.Lcd.print(T_SimpleStroke);
       M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print(T_RoboStroke);
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print(T_TeasingPounding);
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print(T_HalfnHalf);
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
+    case PATTERN_MENUE2:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_Patterns)*0.5),25);
+      M5.Lcd.print(T_Patterns);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print(T_StopNGo);
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
       M5.Lcd.print(T_Insist);
       M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S3Pos+progheight-5);
@@ -946,6 +1094,31 @@ void drawdisplay(int display){
       M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
       M5.Lcd.setCursor(5,S4Pos+progheight-5);
       M5.Lcd.print(T_StrokeNibbler);
+      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+    }
+    break;
+    case PATTERN_MENUE3:
+    {
+      M5.lcd.clearDisplay();
+      M5.Lcd.fillScreen(BgColor);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.setTextSize(1);
+      M5.Lcd.setFont(&FreeSansBold12pt7b);
+      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_Patterns)*0.5),25);
+      M5.Lcd.print(T_Patterns);
+      M5.Lcd.setTextColor(TextColor);
+      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S1Pos+progheight-5);
+      M5.Lcd.print(T_JackHammer);
+      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S2Pos+progheight-5);
+      M5.Lcd.print(T_BLANK);
+      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S3Pos+progheight-5);
+      M5.Lcd.print(T_BLANK);
+      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
+      M5.Lcd.setCursor(5,S4Pos+progheight-5);
+      M5.Lcd.print(T_BLANK);
       M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
     }
     break;
@@ -1036,7 +1209,23 @@ void menue_state_machine(int menuestate){
     vTaskSuspend(cum_t);
     menuestatus = PATTERN_MENUE;
     drawdisplay(PATTERN_MENUE);
-    menueUpdate(3);
+    menueUpdate(6);
+    break;
+    case PATTERN_MENUE2:
+    vTaskSuspend(home_t);
+    vTaskSuspend(torqe_t);
+    vTaskSuspend(cum_t);
+    menuestatus = PATTERN_MENUE2;
+    drawdisplay(PATTERN_MENUE2);
+    menueUpdate(7);
+    break;
+    case PATTERN_MENUE3:
+    vTaskSuspend(home_t);
+    vTaskSuspend(torqe_t);
+    vTaskSuspend(cum_t);
+    menuestatus = PATTERN_MENUE3;
+    drawdisplay(PATTERN_MENUE3);
+    menueUpdate(8);
     break;
     case CUM_MENUE:
     vTaskSuspend(home_t);
