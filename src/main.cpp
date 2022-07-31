@@ -50,7 +50,7 @@ int menuestatus = CONNECT;
 #define TORQE_F 6
 #define TORQE_R 7
 #define OFF 10
-#define ON   11
+#define ON  11
 #define SETUP_D_I 12
 #define SETUP_D_I_F 13
 #define REBOOT 14
