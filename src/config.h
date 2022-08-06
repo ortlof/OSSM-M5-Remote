@@ -39,7 +39,7 @@ uint8_t CUM_Address[] ={0x34, 0xb4, 0x72, 0x12, 0xab, 0xa0};
 #define ENC_4_DT 27
 OneButton Button1(35, false); //MX Button
 OneButton Button2(36, false); //Encoder Left
-OneButton Button3(34, false); // Encoder Right
+OneButton Button3(34, false, true); // Encoder Right
 
 
 
