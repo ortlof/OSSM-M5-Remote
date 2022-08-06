@@ -1,3 +1,4 @@
+#pragma GCC optimize ("Ofast")
 #include <M5Core2.h>
 #include <ESP32Encoder.h>
 #include <esp_now.h>
@@ -5,6 +6,15 @@
 #include <PatternMath.h>
 #include "OneButton.h"          //For Button Debounce and Longpress
 #include "config.h"
+#include <Arduino.h>
+#include <lvgl.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <lv_conf.h>
+#include "ui/ui.h"
+
+int screenWidth  = 320;
+int screenHeight = 240;
 
 ///////////////////////////////////////////
 ////
@@ -172,10 +182,73 @@ void mxlong();
 void click2();
 void click3();
 
-void powerBar(int x, int y, int w, int h, uint8_t val) {
-  M5.lcd.drawRect(x, y, w, h, FrontColor);
-  M5.lcd.fillRect(x + 1, y + 1, w * (((float)100) / 100.0), h - 1, BgColor);
-  M5.lcd.fillRect(x + 1, y + 1, w * (((float)val) / 100.0), h - 1, FrontColor);
+// init the tft espi
+static lv_disp_draw_buf_t draw_buf;
+static lv_disp_drv_t disp_drv;  // Descriptor of a display driver
+static lv_indev_drv_t indev_drv; // Descriptor of a touch driver
+
+M5Display *tft;
+static lv_obj_t * kb;
+
+void tft_lv_initialization() {
+  M5.begin();
+
+  lv_init();
+  static lv_color_t buf1[(LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10];  // Declare a buffer for 1/10 screen siz
+  static lv_color_t buf2[(LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10];  // second buffer is optionnal
+
+  // Initialize `disp_buf` display buffer with the buffer(s).
+  lv_disp_draw_buf_init(&draw_buf, buf1, buf2, (LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10);
+
+  tft = &M5.Lcd;
+}
+
+// Display flushing
+void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+  uint32_t w = (area->x2 - area->x1 + 1);
+  uint32_t h = (area->y2 - area->y1 + 1);
+
+  tft->startWrite();
+  tft->setAddrWindow(area->x1, area->y1, w, h);
+  tft->pushColors((uint16_t *)&color_p->full, w * h, true);
+  tft->endWrite();
+
+  lv_disp_flush_ready(disp);
+}
+
+void init_disp_driver() {
+  lv_disp_drv_init(&disp_drv);  // Basic initialization
+
+  disp_drv.flush_cb = my_disp_flush;  // Set your driver function
+  disp_drv.draw_buf = &draw_buf;      // Assign the buffer to the display
+  disp_drv.hor_res = LV_HOR_RES_MAX;  // Set the horizontal resolution of the display
+  disp_drv.ver_res = LV_VER_RES_MAX;  // Set the vertical resolution of the display
+
+  lv_disp_drv_register(&disp_drv);                   // Finally register the driver
+  lv_disp_set_bg_color(NULL, lv_color_hex3(0x000));  // Set default background color to black
+}
+
+void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
+{
+  TouchPoint_t pos = M5.Touch.getPressPoint();
+  bool touched = ( pos.x == -1 ) ? false : true;  
+
+  if(!touched) {    
+    data->state = LV_INDEV_STATE_RELEASED;
+  } else {
+    data->state = LV_INDEV_STATE_PRESSED; 
+    data->point.x = pos.x;
+    data->point.y = pos.y;
+  }
+}
+
+void init_touch_driver() {
+  lv_disp_drv_register(&disp_drv);
+
+  lv_indev_drv_init(&indev_drv);
+  indev_drv.type = LV_INDEV_TYPE_POINTER;
+  indev_drv.read_cb = my_touchpad_read;
+  lv_indev_t * my_indev = lv_indev_drv_register(&indev_drv);  // register
 }
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -314,34 +387,33 @@ void setup(){
   Button1.attachLongPressStop(mxlong);
   Button2.attachClick(click2);
   Button3.attachClick(click3);
-  displaywidth = M5.Lcd.width();
-  displayheight = M5.Lcd.height();
 
-  S4Pos = displayheight - 40 - progheight;
-  S3Pos = S4Pos - progheight - distheight;
-  S2Pos = S3Pos - progheight - distheight;
-  S1Pos = S2Pos - progheight - distheight;
+  tft_lv_initialization();
+  init_disp_driver();
+  init_touch_driver();
 
-  drawdisplay(HOME);
-  menueUpdate(0);
-  powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
-  powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
-  powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
-  powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
-
+  ui_init();
   encoder4.setCount(Encoder_MAP*0.5);
 }
 
 void loop()
 {
+     const int BatteryLevel = M5.Axp.GetBatteryLevel();
+     String BatteryValue = (String(BatteryLevel, DEC) + "%");
+     const char *battVal = BatteryValue.c_str();
+     lv_bar_set_value(ui_Battery, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue, battVal);
+     lv_bar_set_value(ui_Battery1, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue1, battVal);
+     lv_bar_set_value(ui_Battery2, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue2, battVal);
+
      M5.update();
+     lv_task_handler();
      Button1.tick();
      Button2.tick();
      Button3.tick();
-     //LogDebug(digitalRead(ENCBUTTON1));
-     //LogDebug(digitalRead(ENCBUTTON2));
-     //LogDebug(analogReadMilliVolts(ANALOGIN));
-     //LogDebug(M5.Axp.GetBatVoltage());
+
      switch(menuestatus){
       case CONNECT:
       {
@@ -1161,10 +1233,10 @@ void menue_state_machine(int menuestate){
     case HOME:
     drawdisplay(HOME);
     menueUpdate(2);
-    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
+    //powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
+    //powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
+   // powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
+   //powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
     encoder1.setCount(speedenc);
     encoder2.setCount(depthenc);
     encoder3.setCount(strokeenc);
@@ -1248,22 +1320,22 @@ void updatepowerbars(){
   M5.Lcd.setCursor(95,S1Pos+progheight-5);
   M5.Lcd.print(mms);
   M5.Lcd.print(T_FUCKS_MIN);
-  powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
+  //powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
   M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
   M5.Lcd.fillRect(85,S2Pos,85,30,BgColor);
   int mmd = depth;
   M5.Lcd.setCursor(95,S2Pos+progheight-5);
   M5.Lcd.print(mmd);
   M5.Lcd.print(T_MM);
-  powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
+ // powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
   M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
   M5.Lcd.fillRect(85,S3Pos,85,30,BgColor);
   int mmst = stroke;
   M5.Lcd.setCursor(95,S3Pos+progheight-5);
   M5.Lcd.print(mmst);
   M5.Lcd.print(T_MM);
-  powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
-  powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
+ // powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
+ // powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
 }
 
 int64_t touchmenue(){
