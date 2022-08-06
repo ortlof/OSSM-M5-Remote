@@ -407,6 +407,12 @@ void loop()
      lv_label_set_text(ui_BattValue1, battVal);
      lv_bar_set_value(ui_Battery2, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue2, battVal);
+     lv_bar_set_value(ui_Battery3, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue3, battVal);
+     lv_bar_set_value(ui_Battery4, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue4, battVal);
+     lv_bar_set_value(ui_Battery5, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue5, battVal);
 
      M5.update();
      lv_task_handler();
@@ -1386,14 +1392,17 @@ void mxclick() {
            break;
          }
 } 
+
 void mxlong(){
   Serial.println("MX Long click.");
   menue_state_machine(MENUE);
   vibrate();
 } 
+
 void click2() {
   Serial.println("Button 2 click.");
 } // click1
+
 void click3() {
   Serial.println("Button 3 click.");
 } // click1
