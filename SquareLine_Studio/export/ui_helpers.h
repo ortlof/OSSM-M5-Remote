@@ -3,6 +3,7 @@
 // LVGL VERSION: 8.2
 // PROJECT: OSSM-White
 
+#ifndef _OSSM-WHITE_UI_HELPERS_H
 #define _OSSM-WHITE_UI_HELPERS_H
 
 #if __has_include("lvgl.h")
@@ -92,3 +93,6 @@ void _ui_arc_set_text_value(lv_obj_t * trg, lv_obj_t * src, char * prefix, char 
 void _ui_slider_set_text_value(lv_obj_t * trg, lv_obj_t * src, char * prefix, char * postfix);
 
 void _ui_checked_set_text_value(lv_obj_t * trg, lv_obj_t * src, char * txt_on, char * txt_off);
+
+
+#endif
