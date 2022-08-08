@@ -41,12 +41,7 @@ OneButton Button1(35, false); //MX Button
 OneButton Button2(36, false); //Encoder Left
 OneButton Button3(34, false, true); // Encoder Right
 
-
-
-#define Encoder_MAP 84
-
-
-
+#define Encoder_MAP 48
 
 // Color 
 #define TextColor  TFT_PURPLE

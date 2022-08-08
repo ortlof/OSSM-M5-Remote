@@ -127,7 +127,6 @@ extern lv_obj_t * ui_ejectaddon;
 extern lv_obj_t * ui_darkmode;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
-extern lv_group_t * ui_g_menue;
 
 void screenmachine(lv_event_t * e);
 void screenmachine(lv_event_t * e);
@@ -143,6 +142,9 @@ void savesettings(lv_event_t * e);
 
 LV_IMG_DECLARE(ui_img_km__png);    // assets\km..png
 LV_IMG_DECLARE(ui_img_ortlodof_png);    // assets\ortlodof.png
+
+
+
 
 void ui_init(void);
 

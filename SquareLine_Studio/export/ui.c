@@ -118,7 +118,6 @@ lv_obj_t * ui_ejectaddon;
 lv_obj_t * ui_darkmode;
 lv_obj_t * ui_vibrate;
 lv_obj_t * ui_lefty;
-lv_group_t * ui_g_menue;
 
 ///////////////////// TEST LVGL SETTINGS ////////////////////
 #if LV_COLOR_DEPTH != 16
@@ -661,7 +660,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonL, LV_ALIGN_CENTER);
 
-    lv_obj_add_state(ui_HomeButtonL, LV_STATE_DISABLED);
+    lv_obj_add_state(ui_HomeButtonL, LV_STATE_CHECKED | LV_STATE_DISABLED);
 
     lv_obj_add_flag(ui_HomeButtonL, LV_OBJ_FLAG_CHECKABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_HomeButtonL, LV_OBJ_FLAG_SCROLLABLE);
@@ -699,7 +698,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonM, LV_ALIGN_CENTER);
 
-    lv_obj_add_flag(ui_HomeButtonM, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(ui_HomeButtonM, LV_OBJ_FLAG_CHECKABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_HomeButtonM, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_add_event_cb(ui_HomeButtonM, ui_event_HomeButtonM, LV_EVENT_ALL, NULL);
@@ -1133,7 +1132,6 @@ void ui_Menue_screen_init(void)
 
     lv_obj_add_flag(ui_MenueButtonR, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_MenueButtonR, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_state(ui_MenueButtonR, LV_STATE_DISABLED);
 
     lv_obj_add_event_cb(ui_MenueButtonR, ui_event_MenueButtonR, LV_EVENT_ALL, NULL);
     lv_obj_set_style_bg_color(ui_MenueButtonR, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1215,15 +1213,15 @@ void ui_Menue_screen_init(void)
     lv_obj_set_x(ui_SDepthI, lv_pct(1));
 
     lv_obj_set_align(ui_SDepthI, LV_ALIGN_CENTER);
+
     lv_obj_add_state(ui_SDepthI, LV_STATE_FOCUSED);
 
     lv_obj_add_flag(ui_SDepthI, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_SDepthI, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_add_event_cb(ui_SDepthI, ui_event_SDepthI, LV_EVENT_ALL, NULL);
-    lv_obj_set_style_bg_color(ui_SDepthI, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_SDepthI, lv_color_hex(0x83247B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_SDepthI, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_SDepthI, lv_color_hex(0x5b0353), LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_SDepthIL
 
@@ -1260,7 +1258,6 @@ void ui_Menue_screen_init(void)
     lv_obj_add_event_cb(ui_SDepthF, ui_event_SDepthF, LV_EVENT_ALL, NULL);
     lv_obj_set_style_bg_color(ui_SDepthF, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_SDepthF, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_SDepthF, lv_color_hex(0x5b0353), LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_SDepthFL
 
@@ -1297,7 +1294,6 @@ void ui_Menue_screen_init(void)
     lv_obj_add_event_cb(ui_SPattern, ui_event_SPattern, LV_EVENT_ALL, NULL);
     lv_obj_set_style_bg_color(ui_SPattern, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_SPattern, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_SPattern, lv_color_hex(0x5b0353), LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_SPatternL
 
@@ -1334,7 +1330,6 @@ void ui_Menue_screen_init(void)
     lv_obj_add_event_cb(ui_STorqe, ui_event_STorqe, LV_EVENT_ALL, NULL);
     lv_obj_set_style_bg_color(ui_STorqe, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_STorqe, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_STorqe, lv_color_hex(0x5b0353), LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_STorqeL
 
@@ -1373,7 +1368,6 @@ void ui_Menue_screen_init(void)
     lv_obj_add_event_cb(ui_EJECTSettingButton, ui_event_EJECTSettingButton, LV_EVENT_ALL, NULL);
     lv_obj_set_style_bg_color(ui_EJECTSettingButton, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_EJECTSettingButton, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui_EJECTSettingButton, lv_color_hex(0x5b0353), LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_EJECTSettingButtonText
 
@@ -1391,13 +1385,6 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_style_text_color(ui_EJECTSettingButtonText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_EJECTSettingButtonText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    ui_g_menue = lv_group_create();
-    lv_group_add_obj(ui_g_menue, ui_SDepthI);
-    lv_group_add_obj(ui_g_menue, ui_SDepthF);
-    lv_group_add_obj(ui_g_menue, ui_SPattern);
-    lv_group_add_obj(ui_g_menue, ui_STorqe);
-    lv_group_add_obj(ui_g_menue, ui_EJECTSettingButton);
 
 }
 void ui_Pattern_screen_init(void)
