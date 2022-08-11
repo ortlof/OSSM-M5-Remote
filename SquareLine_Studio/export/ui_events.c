@@ -29,3 +29,13 @@ void homebuttonmevent(lv_event_t * e)
 {
 	// Your code here
 }
+
+void setupDepthInter(lv_event_t * e)
+{
+	// Your code here
+}
+
+void setupdepthF(lv_event_t * e)
+{
+	// Your code here
+}

@@ -52,6 +52,8 @@ extern lv_obj_t * ui_homesensationslider;
 extern lv_obj_t * ui_Batt2;
 extern lv_obj_t * ui_BattValue2;
 extern lv_obj_t * ui_Battery2;
+extern lv_obj_t * ui_HomePatternLabel1;
+extern lv_obj_t * ui_HomePatternLabel;
 extern lv_obj_t * ui_Menue;
 extern lv_obj_t * ui_Logo3;
 extern lv_obj_t * ui_MenueButtonL;
@@ -84,8 +86,8 @@ extern lv_obj_t * ui_PatternButtonRText;
 extern lv_obj_t * ui_Batt5;
 extern lv_obj_t * ui_BattValue5;
 extern lv_obj_t * ui_Battery5;
-extern lv_obj_t * ui_PatternS;
 extern lv_obj_t * ui_Label4;
+extern lv_obj_t * ui_PatternS;
 extern lv_obj_t * ui_Torqe;
 extern lv_obj_t * ui_Logo4;
 extern lv_obj_t * ui_TorqeButtonL;
@@ -134,6 +136,8 @@ void screenmachine(lv_event_t * e);
 void ejectcreampie(lv_event_t * e);
 void homebuttonmevent(lv_event_t * e);
 void screenmachine(lv_event_t * e);
+void setupDepthInter(lv_event_t * e);
+void setupdepthF(lv_event_t * e);
 void screenmachine(lv_event_t * e);
 void savepattern(lv_event_t * e);
 void screenmachine(lv_event_t * e);
@@ -143,6 +147,9 @@ void savesettings(lv_event_t * e);
 
 LV_IMG_DECLARE(ui_img_km__png);    // assets\km..png
 LV_IMG_DECLARE(ui_img_ortlodof_png);    // assets\ortlodof.png
+
+
+
 
 void ui_init(void);
 
