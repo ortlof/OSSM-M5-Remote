@@ -7,10 +7,9 @@
 #include "OneButton.h"          //For Button Debounce and Longpress
 #include "config.h"
 #include <Arduino.h>
-#include <lvgl.h>
 #include <Wire.h>
+#include <lvgl.h>
 #include <SPI.h>
-#include <lv_conf.h>
 #include "ui/ui.h"
 #include <EEPROM.h>
 
@@ -108,7 +107,8 @@ int S2Pos;
 int S3Pos;
 int S4Pos;
 bool rstate = false;
-int pattern = 1;
+int pattern = 2;
+char patternstr[20];
 bool onoff = false;
 
 long speedenc = 0;
@@ -185,7 +185,6 @@ esp_now_peer_info_t peerInfo;
 
 bool EJECT_On = false;
 bool OSSM_On = false;
-
 
 #define EEPROM_SIZE 200
 
@@ -429,7 +428,9 @@ void ejectcreampie(lv_event_t * e){
 }
 
 void savepattern(lv_event_t * e){
-
+  pattern = lv_roller_get_selected(ui_PatternS);
+  lv_roller_get_selected_str(ui_PatternS,patternstr,0);
+  lv_label_set_text(ui_HomePatternLabel,patternstr);
 }
 
 void homebuttonmevent(lv_event_t * e){
@@ -440,6 +441,15 @@ void homebuttonmevent(lv_event_t * e){
     lv_obj_add_state(ui_HomeButtonM, LV_STATE_CHECKED);
     OSSM_On = true;
   } 
+}
+
+void setupDepthInter(lv_event_t * e){
+
+}
+
+void setupdepthF(lv_event_t * e){
+
+  
 }
 
 void setup(){
@@ -511,9 +521,9 @@ void setup(){
   if(lefty_mode == true){
   lv_obj_add_state(ui_lefty, LV_STATE_CHECKED);
   }
-
-  encoder4.setCount(Encoder_MAP*0.5);
-
+  lv_roller_set_selected(ui_PatternS,2,LV_ANIM_OFF);
+  lv_roller_get_selected_str(ui_PatternS,patternstr,0);
+  lv_label_set_text(ui_HomePatternLabel,patternstr);
 }
 
 void loop()
@@ -650,6 +660,7 @@ void loop()
 
       }
       break;
+
       case ST_UI_MENUE:
       {
         if(encoder4.getCount() > encoder4_enc + 2){
@@ -674,6 +685,17 @@ void loop()
 
       case ST_UI_PATTERN:
       {
+        if(encoder4.getCount() > encoder4_enc + 2){
+          LogDebug("next");
+          uint32_t t = LV_KEY_DOWN;
+          lv_event_send(ui_PatternS, LV_EVENT_KEY, &t);
+          encoder4_enc = encoder4.getCount();
+        } else if(encoder4.getCount() < encoder4_enc -2){
+          uint32_t t = LV_KEY_UP;
+          lv_event_send(ui_PatternS, LV_EVENT_KEY, &t);
+          LogDebug("Preview");
+          encoder4_enc = encoder4.getCount();
+        }
          if(click2_short_waspressed == true){
          lv_event_send(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){

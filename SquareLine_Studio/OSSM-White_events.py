@@ -22,3 +22,15 @@ def HomeButtonMEvent(event_struct):
 def homebuttonmevent(event_struct):
     return
 
+
+def setupdepthI(event_struct):
+    return
+
+
+def setupDepthInter(event_struct):
+    return
+
+
+def setupdepthF(event_struct):
+    return
+
