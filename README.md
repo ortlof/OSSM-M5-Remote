@@ -78,15 +78,16 @@ PCB Files in Folder
 4. Flash Code Like Described in this Readme https://github.com/KinkyMakers/OSSM-hardware/blob/master/OSSM%20PlatformIO%20Readme.md
 
 OSSM Remote and OSSM works out of the box right now with 0xFF Broadcast Adresses
-For safety or when you wan't to use more than one OSSM Remote and OSSM in one Room. 
-You need to set Your MAC adresses acordingly:
+Next Versions get OSSM and Remote IDs in Remote to setup. 
+~~For safety or when you wan't to use more than one OSSM Remote and OSSM in one Room. ~~
+~~You need to set Your MAC adresses acordingly:~~
 
-After building both codes they display MAC's in Serial Console.
-Find Line and Change to your OSSM MAC in OSSM code you have to Set the mac of your Remote. 
+~~After building both codes they display MAC's in Serial Console.~~
+~~Find Line and Change to your OSSM MAC in OSSM code you have to Set the mac of your Remote. ~~
 
-MAC in Serial Looks like: 34:86:5D:57:F5:84
+~~MAC in Serial Looks like: 34:86:5D:57:F5:84~~
 
-Change to this:
+~~Change to this:~~
 
-"#define OSSM 1"
-"uint8_t OSSM_Address[] = {0x34, 0x86, 0x5d, 0x57, 0xf5, 0x84};"
+~~"#define OSSM 1"~~
+~~"uint8_t OSSM_Address[] = {0x34, 0x86, 0x5d, 0x57, 0xf5, 0x84};"~~

@@ -12,6 +12,7 @@
 #include <SPI.h>
 #include "ui/ui.h"
 #include <EEPROM.h>
+#include "main.h"
 
 int screenWidth  = 320;
 int screenHeight = 240;
@@ -98,6 +99,9 @@ bool lefty_mode = false;
 #define CUMSIZE   22
 #define CUMACCEL  23
 
+#define CONNECT 88
+#define HEARTBEAT 99
+
 int displaywidth;
 int displayheight;
 int progheight = 30;
@@ -123,12 +127,13 @@ long cum_s_enc = 0;
 long cum_a_enc = 0;
 long encoder4_enc = 0;
 
+extern float maxdepthinmm = 180.0;
+extern float speedlimit = 1200;
+
 float speed = 0.0;
 float depth = 0.0;
 float stroke = 0.0;
 float sensation = 0.0;
-float maxdepthinmm = 180.0;
-float speedlimit = 1200;
 float torqe_f = 100.0;
 float torqe_r = -180.0;
 float cum_time = 0.0;
@@ -153,6 +158,7 @@ bool out_esp_rstate;
 bool out_esp_connected;
 int out_esp_command;
 float out_esp_value;
+int out_esp_target;
 
 float incoming_esp_speed;
 float incoming_esp_depth;
@@ -161,6 +167,8 @@ float incoming_esp_sensation;
 float incoming_esp_pattern;
 bool incoming_esp_rstate;
 bool incoming_esp_connected;
+bool incoming_esp_heartbeat;
+int incoming_esp_target;
 
 typedef struct struct_message {
   float esp_speed;
@@ -170,16 +178,22 @@ typedef struct struct_message {
   float esp_pattern;
   bool esp_rstate;
   bool esp_connected;
+  bool esp_heartbeat;
   int esp_command;
   float esp_value;
+  int esp_target;
 } struct_message;
 
 bool esp_connect = false;
+bool m5_first_connect = false;
 
 struct_message outgoingcontrol;
 struct_message incomingcontrol;
 
 esp_now_peer_info_t peerInfo;
+
+unsigned long Heartbeat_Time = 0;
+const long Heartbeat_Interval = 10000;
 
 // Bool
 
@@ -191,12 +205,8 @@ bool OSSM_On = false;
 // Tasks:
 
 TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
-TaskHandle_t torqe_t    = nullptr;
-TaskHandle_t cum_t      = nullptr; 
+
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
-void vibrationTask(void *pvParameters); // Handels the EspNow Remote
-void torqescreentask(void *pvParameters); // Handels Torqe Settings Display
-void cumscreentask(void *pvParameters); // Handels Lube Display
 bool connectbtn(); //Handels Connectbtn
 int64_t touchmenue();
 void vibrate();
@@ -296,63 +306,63 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
-  LogDebug("Bytes received: ");
-  LogDebug(len);
 
-  if(esp_connect == false && incomingcontrol.esp_connected == true){  
+  if(incomingcontrol.esp_target == M5_ID && incomingcontrol.esp_connected == true && m5_first_connect == false){
     speedlimit = incomingcontrol.esp_speed;
     maxdepthinmm = incomingcontrol.esp_depth;
     pattern = incomingcontrol.esp_pattern;
-    outgoingcontrol.esp_connected = false;
-    esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    outgoingcontrol.esp_target = OSSM_ID;
+    esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     LogDebug(result);
     if (result == ESP_OK) {
-      esp_connect = true;
-      outgoingcontrol.esp_connected = true;
-      M5.Lcd.setCursor(5,20);
-      M5.Lcd.setFont(&FreeSansBold9pt7b);
-      M5.Lcd.setTextColor(FrontColor);
-      M5.Lcd.print(T_CON);
-      M5.Lcd.fillScreen(WHITE);
-      delay(200);
+      m5_first_connect = true;
+      lv_label_set_text(ui_connect, "Connected");
+      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
-  } 
+  }
+  switch(incomingcontrol.esp_command)
+    {
+    case OFF: 
+    {
+    lv_obj_clear_state(ui_HomeButtonM, LV_STATE_CHECKED);
+    OSSM_On = false;
+    }
+    break;
+    case ON:
+    {
+    lv_obj_add_state(ui_HomeButtonM, LV_STATE_CHECKED);
+    OSSM_On = true;
+    }
+    break;
+    }
 }
 
 //Sends Commands and Value to Remote device returns ture or false if sended
 bool SendCommand(int Command, float Value, int Target){
-      if(esp_connect == true){
-      switch (Target){
-      case OSSM:
-      {
+      if(m5_first_connect == true){
       outgoingcontrol.esp_connected = true;
       outgoingcontrol.esp_command = Command;
       outgoingcontrol.esp_value = Value;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      outgoingcontrol.esp_target = Target;
+      esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       if (result == ESP_OK) {
       return true;
       } else {
+      delay(20);
+      esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       return false;
       }
       }
-      break;
-      case CUM:
-      {
-      outgoingcontrol.esp_connected = true;
-      outgoingcontrol.esp_command = Command;
-      outgoingcontrol.esp_value = Value;
-      LogDebug(Command);
-      LogDebug(Value);
-      esp_err_t result = esp_now_send(CUM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-      return true;
-      } else {
-      return false;
-      } 
-      break;
-      }
-      }
-      }
+}
+
+void connectbutton(lv_event_t * e)
+{
+    if(m5_first_connect == false){
+    outgoingcontrol.esp_command = HEARTBEAT;
+    outgoingcontrol.esp_heartbeat = true;
+    outgoingcontrol.esp_target = OSSM_ID;
+    esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    }
 }
 
 void savesettings(lv_event_t * e)
@@ -410,6 +420,14 @@ void screenmachine(lv_event_t * e)
     st_screens = ST_UI_PATTERN;
   } else if (lv_scr_act() == ui_Torqe){
     st_screens = ST_UI_Torqe;
+    torqe_f = lv_slider_get_value(ui_outtroqeslider);
+    torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
+    encoder1.setCount(torqe_f_enc);
+
+    torqe_r = lv_slider_get_value(ui_introqeslider);
+    torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
+    encoder4.setCount(torqe_r_enc);
+
   } else if (lv_scr_act() == ui_EJECTSettings){
     st_screens = ST_UI_EJECTSETTINGS;
   } else if (lv_scr_act() == ui_Settings){
@@ -431,25 +449,26 @@ void savepattern(lv_event_t * e){
   pattern = lv_roller_get_selected(ui_PatternS);
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
+  LogDebug(pattern);
+  float patterns = pattern;
+  SendCommand(PATTERN, patterns, OSSM_ID);
 }
 
 void homebuttonmevent(lv_event_t * e){
-  if(OSSM_On == true){
-    lv_obj_clear_state(ui_HomeButtonM, LV_STATE_CHECKED);
-    OSSM_On = false;
-  } else if(OSSM_On == false){
-    lv_obj_add_state(ui_HomeButtonM, LV_STATE_CHECKED);
-    OSSM_On = true;
-  } 
+  LogDebug("HomeButton");
+  if(OSSM_On == false){
+    SendCommand(ON, 0.0, OSSM_ID);
+  } else if(OSSM_On == true){
+    SendCommand(OFF, 0.0, OSSM_ID);
+  }
 }
 
 void setupDepthInter(lv_event_t * e){
-
+    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
 }
 
 void setupdepthF(lv_event_t * e){
-
-  
+    SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
 }
 
 void setup(){
@@ -468,24 +487,6 @@ void setup(){
                             0);                 /* pin task to core 0 */
   delay(100);
 
-  xTaskCreatePinnedToCore(torqescreentask,     /* Task function. */
-                            "torqescreentask", /* name of task. */
-                            4096,                /* Stack size of task */
-                            NULL,                /* parameter of the task */
-                            1,                   /* priority of the task */
-                            &torqe_t,            /* Task handle to keep track of created task */
-                            0);                  /* pin task to core 0 */
-  vTaskSuspend(torqe_t);
-
-  xTaskCreatePinnedToCore(cumscreentask,     /* Task function. */
-                            "cumscreentask", /* name of task. */
-                            4096,                /* Stack size of task */
-                            NULL,                /* parameter of the task */
-                            1,                   /* priority of the task */
-                            &cum_t,            /* Task handle to keep track of created task */
-                            0);                  /* pin task to core 0 */
-  vTaskSuspend(cum_t);
-
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
@@ -499,13 +500,14 @@ void setup(){
   init_disp_driver();
   init_touch_driver();
 
-  ui_init();
 
   //****Load EEPROOM:
   eject_status = EEPROM.readBool(EJECT);
   dark_mode = EEPROM.readBool(DARKMODE);
   vibrate_mode = EEPROM.readBool(VIBRATE);
   lefty_mode = EEPROM.readBool(LEFTY);
+
+  ui_init();
   
   if(eject_status == true){
   lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
@@ -577,11 +579,13 @@ void loop()
             } 
             speedenc = encoder1.getCount();
             speed = fscale(0, Encoder_MAP, 0, speedlimit, speedenc, 0);
+            SendCommand(SPEED, speed, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homespeedslider) != speed){
             speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
             encoder1.setCount(speedenc);
             speed = lv_slider_get_value(ui_homespeedslider);
+            SendCommand(SPEED, speed, OSSM_ID);
         }
         char speed_v[7];
         dtostrf(speed, 6, 0, speed_v);
@@ -599,11 +603,13 @@ void loop()
             } 
             depthenc = encoder2.getCount();
             depth = fscale(0, Encoder_MAP, 0, maxdepthinmm, depthenc, 0);
+            SendCommand(DEPTH, depth, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homedepthslider) != depth){
             depthenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, depth, 0);
             encoder2.setCount(depthenc);
             depth = lv_slider_get_value(ui_homedepthslider);
+            SendCommand(DEPTH, depth, OSSM_ID);
         }
         char depth_v[7];
         dtostrf(depth, 6, 0, depth_v);
@@ -621,11 +627,13 @@ void loop()
             } 
             strokeenc = encoder3.getCount();
             stroke = fscale(0, Encoder_MAP, 0, maxdepthinmm, strokeenc, 0);
+            SendCommand(STROKE, stroke, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homestrokeslider) != stroke){
             strokeenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, stroke, 0);
             encoder3.setCount(strokeenc);
             stroke = lv_slider_get_value(ui_homestrokeslider);
+            SendCommand(STROKE, stroke, OSSM_ID);
         }
         char stroke_v[7];
         dtostrf(stroke, 6, 0, stroke_v);
@@ -642,11 +650,13 @@ void loop()
             } 
             sensationenc = encoder4.getCount();
             sensation = fscale((Encoder_MAP/2*-1), (Encoder_MAP/2), -100, 100, sensationenc, 0);
+            SendCommand(SENSATION, sensation, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homesensationslider) != sensation){
             sensationenc =  fscale(-100, 100, (Encoder_MAP/2*-1), (Encoder_MAP/2), sensation, 0);
             encoder4.setCount(sensationenc);
             sensation = lv_slider_get_value(ui_homesensationslider);
+            SendCommand(SENSATION, sensation, OSSM_ID);
         }
 
         if(click2_short_waspressed == true){
@@ -708,6 +718,52 @@ void loop()
 
       case ST_UI_Torqe:
       {
+        // Encoder 1 Torqe Out
+        if(lv_slider_is_dragged(ui_outtroqeslider) == false){
+          if (encoder1.getCount() != torqe_f_enc){
+            lv_slider_set_value(ui_outtroqeslider, torqe_f, LV_ANIM_OFF);
+            if(encoder1.getCount() <= 0){
+              encoder1.setCount(0);
+            } else if (encoder1.getCount() >= Encoder_MAP){
+              encoder1.setCount(Encoder_MAP);
+            } 
+            torqe_f_enc = encoder1.getCount();
+            torqe_f = fscale(0, Encoder_MAP, 50, 200, torqe_f_enc, 0);
+            SendCommand(TORQE_F, torqe_f, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_outtroqeslider) != torqe_f){
+            torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
+            encoder1.setCount(torqe_f_enc);
+            torqe_f = lv_slider_get_value(ui_outtroqeslider);
+            SendCommand(TORQE_F, torqe_f, OSSM_ID);
+        }
+        char torqe_f_v[7];
+        dtostrf((torqe_f*-1), 6, 0, torqe_f_v);
+        lv_label_set_text(ui_outtroqevalue, torqe_f_v);
+
+        // Encoder 4 Torqe IN
+        if(lv_slider_is_dragged(ui_introqeslider) == false){
+          if (encoder4.getCount() != torqe_r_enc){
+            lv_slider_set_value(ui_introqeslider, torqe_r, LV_ANIM_OFF);
+            if(encoder4.getCount() <= 0){
+              encoder4.setCount(0);
+            } else if (encoder4.getCount() >= Encoder_MAP){
+              encoder4.setCount(Encoder_MAP);
+            } 
+            torqe_r_enc = encoder4.getCount();
+            torqe_r = fscale(0, Encoder_MAP, 20, 200, torqe_r_enc, 0);
+            SendCommand(TORQE_R, torqe_r, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_introqeslider) != torqe_r){
+            torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
+            encoder4.setCount(torqe_r_enc);
+            torqe_r = lv_slider_get_value(ui_introqeslider);
+            SendCommand(TORQE_R, torqe_r, OSSM_ID);
+        }
+        char torqe_r_v[7];
+        dtostrf(torqe_r, 6, 0, torqe_r_v);
+        lv_label_set_text(ui_introqevalue, torqe_r_v);
+
          if(click2_short_waspressed == true){
          lv_event_send(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
@@ -742,266 +798,6 @@ void loop()
       }
       break;    
      }
-      
-      /*
-      if(M5.BtnC.wasReleased()) {
-      outgoingcontrol.esp_connected = false;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      vibrate();
-      delay(100);
-      }
-
-      if(M5.BtnA.wasReleased()) {
-      esp_connect = true;
-      outgoingcontrol.esp_connected = true;
-      M5.Lcd.setCursor(5,20);
-      M5.Lcd.setFont(&FreeSansBold9pt7b);
-      M5.Lcd.setTextColor(FrontColor);
-      M5.Lcd.print(T_CON);
-      M5.Lcd.fillScreen(WHITE);
-      menue_state_machine(HOME);
-      menuestatus = HOME;
-      menueUpdate(2);
-      delay(200);
-      vTaskResume(home_t);
-      }
-      
-      }
-      break;
-      
-      case HOME:
-      if(M5.BtnA.wasReleased()) {
-      speedenc = encoder1.getCount();
-      speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
-      SendCommand(SPEED, speed, OSSM);
-      depthenc = encoder2.getCount();
-      depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
-      SendCommand(DEPTH, depth, OSSM);
-      strokeenc = encoder3.getCount();
-      stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
-      SendCommand(STROKE, stroke, OSSM);
-      sensationenc = encoder4.getCount();
-      sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
-      SendCommand(SENSATION, sensation, OSSM);
-      SendCommand(ON, 0, OSSM);
-      menueUpdate(1);
-      vibrate();
-      }
-
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(MENUE);
-      vibrate();
-      }
-  
-      if(M5.BtnC.wasReleased()) {
-      SendCommand(OFF, 0, OSSM);
-      menueUpdate(2);
-      vibrate();
-      }
-      break;
-
-      case MENUE:
-     {
-      switch(touchmenue()){
-        case 1:
-        menue_state_machine(HOME);
-        SendCommand(SETUP_D_I, 0, OSSM);
-        updatepowerbars();
-      vibrate();
-        break;
-        case 2:
-        menue_state_machine(HOME);
-        SendCommand(SETUP_D_I_F, 0, OSSM);
-        updatepowerbars();
-      vibrate();
-        break;
-        case 3:
-        menue_state_machine(PATTERN_MENUE);
-      vibrate();
-        break;
-        case 4:
-        menue_state_machine(TORQE);
-        vibrate();
-        break;
-      }
-      
-      if(M5.BtnA.wasReleased()) {
-      menue_state_machine(CUM_MENUE);
-      vibrate();
-      delay(100);
-      }
-
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      }
-
-      if(M5.BtnC.wasReleased()) {
-      menue_state_machine(MENUE2);
-      }
-     }
-    break;
-
-    case MENUE2:
-     {
-      switch(touchmenue()){
-        case 1:
-        vibrate();
-        LogDebug("Reboot Triggerd");
-        SendCommand(REBOOT, 0, OSSM);
-        ESP.restart();
-        break;
-        case 2:
-      vibrate();
-        break;
-        case 3:
-      vibrate();
-        break;
-        case 4:
-      vibrate();
-        break;
-      }
-
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      }
-      if(M5.BtnC.wasReleased()) {
-      menue_state_machine(MENUE);
-      vibrate();
-      }
-     }
-      break;
-
-      case TORQE:
-      {
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      }  
-      }
-      break;
-      case PATTERN_MENUE:
-      { 
-      
-      switch(touchmenue()){
-        case 1:
-          SendCommand(PATTERN, 0, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 2:
-          SendCommand(PATTERN, 2, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 3:
-          SendCommand(PATTERN, 1, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 4:
-          SendCommand(PATTERN, 3, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-      }
-
-      if(M5.BtnB.wasReleased()) {
-        menue_state_machine(HOME);
-        vibrate();
-      }
-      if(M5.BtnC.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE2);
-        vibrate();
-      }
-      }
-      break;
-      case PATTERN_MENUE2:
-      {
-      switch(touchmenue()){
-        case 1:
-          SendCommand(PATTERN, 5, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 2:
-          SendCommand(PATTERN, 6, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 3:
-          SendCommand(PATTERN, 4, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 4:
-          SendCommand(PATTERN, 8, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-      }
-      if(M5.BtnA.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE);
-        vibrate();
-      }
-      if(M5.BtnB.wasReleased()) {
-        menue_state_machine(HOME);
-        vibrate();
-      }
-      if(M5.BtnC.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE3);
-        vibrate();
-      }
-      }
-      break;
-      case PATTERN_MENUE3:
-      { 
-      switch(touchmenue()){
-        case 1:
-          SendCommand(PATTERN, 7, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 2:
-          vibrate();
-          break;
-        case 3:
-          vibrate();
-          break;
-        case 4:
-          vibrate();
-          break;
-      }
-      if(M5.BtnA.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE2);
-        vibrate();
-      }
-      if(M5.BtnB.wasReleased()) {
-        menue_state_machine(HOME);
-        vibrate();
-      }
-      }
-      break;
-      case CUM_MENUE:
-      {
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      } 
-      }
-      break;
-      }
-      */
      mxclick_long_waspressed = false;
      mxclick_short_waspressed = false;
      click2_short_waspressed = false;
@@ -1028,13 +824,7 @@ void espNowRemoteTask(void *pvParameters)
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
   // register first peer  
-  memcpy(peerInfo.peer_addr, OSSM_Address, 6);
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-    return;
-  }
-  // register second peer  
-  memcpy(peerInfo.peer_addr, CUM_Address, 6);
+  memcpy(peerInfo.peer_addr, Broadcast_Address, 6);
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
     Serial.println("Failed to add peer");
     return;
@@ -1048,67 +838,7 @@ void espNowRemoteTask(void *pvParameters)
     }
 }
 
-void homescreentask(void *pvParameters)
-{
-for(;;)
- {
-  if(esp_connect == true){
-  M5.Lcd.setTextColor(FrontColor);
-  if(encoder1.getCount() != speedenc){
-    speedenc = encoder1.getCount();
-    speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
-    SendCommand(SPEED, speed, OSSM);
-  }
-  if(encoder2.getCount() != depthenc){
-    depthenc = encoder2.getCount();
-    depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
-    SendCommand(DEPTH, depth, OSSM);
-  }
-  if(encoder3.getCount() != strokeenc){
-    strokeenc = encoder3.getCount();
-    stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
-    SendCommand(STROKE, stroke, OSSM);
-  }
-
-
-  if(encoder4.getCount() != sensationenc){
-    sensationenc = encoder4.getCount();
-    sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
-    SendCommand(SENSATION, sensation, OSSM);
-  }
-}
-vTaskDelay(100);
-} 
-}
-
-void torqescreentask(void *pvParameters)
-{
-  for(;;)
-  {
-  M5.Lcd.setTextColor(FrontColor);
-  if(encoder1.getCount() != torqe_r_enc)
-    {
-    torqe_r_enc = encoder1.getCount();
-    torqe_r = map(constrain(torqe_r_enc,0,Encoder_MAP),0,Encoder_MAP,-200,-50);
-    M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S1Pos+progheight-5);
-    M5.Lcd.print(torqe_r);
-    SendCommand(TORQE_R, torqe_r, OSSM);
-    }
-
-  if(encoder4.getCount() != torqe_f_enc)
-    {
-    torqe_f_enc = encoder4.getCount();
-    torqe_f = map(constrain(torqe_f_enc,0,Encoder_MAP),0,Encoder_MAP,200,20);
-    M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S2Pos+progheight-5);
-    M5.Lcd.print(torqe_f);
-    SendCommand(TORQE_F, torqe_f, OSSM);
-    }
-  vTaskDelay(100);
-  }
-}
-
+/*
 void cumscreentask(void *pvParameters)
 {
   for(;;)
@@ -1156,6 +886,7 @@ void cumscreentask(void *pvParameters)
   vTaskDelay(100);
   }
 }
+*/
 
 void vibrate(){
     if(vibrate_mode == true){
@@ -1167,13 +898,11 @@ void vibrate(){
 
 void mxclick() {
   vibrate();
-  Serial.println("MX click.");
   mxclick_short_waspressed = true;
 } 
 
 void mxlong(){
   vibrate();
-  Serial.println("MX Long click.");
   mxclick_long_waspressed = true;
 } 
 
@@ -1184,6 +913,5 @@ void click2() {
 
 void click3() {
   vibrate();
-  Serial.println("Button 3 click.");
   click3_short_waspressed = true;
 } // click1
