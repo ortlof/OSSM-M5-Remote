@@ -39,3 +39,8 @@ void setupdepthF(lv_event_t * e)
 {
 	// Your code here
 }
+
+void connectbutton(lv_event_t * e)
+{
+	// Your code here
+}

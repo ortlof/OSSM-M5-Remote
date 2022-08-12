@@ -5,6 +5,8 @@
 
 #include "ui.h"
 #include "ui_helpers.h"
+#include "main.h"
+#include "language.h"
 
 ///////////////////// VARIABLES ////////////////////
 lv_obj_t * ui_Start;
@@ -45,6 +47,7 @@ lv_obj_t * ui_BattValue2;
 lv_obj_t * ui_Battery2;
 lv_obj_t * ui_HomePatternLabel1;
 lv_obj_t * ui_HomePatternLabel;
+lv_obj_t * ui_connect;
 lv_obj_t * ui_Menue;
 lv_obj_t * ui_Logo3;
 lv_obj_t * ui_MenueButtonL;
@@ -87,10 +90,16 @@ lv_obj_t * ui_TorqeButtonM;
 lv_obj_t * ui_TorqeButtonMText;
 lv_obj_t * ui_TorqeButtonR;
 lv_obj_t * ui_TorqeButtonRText;
-lv_obj_t * ui_SpeedL1;
+lv_obj_t * ui_outtroqelabel;
 lv_obj_t * ui_outtroqevalue;
-lv_obj_t * ui_DepthL1;
+lv_obj_t * ui_outtroqeslider;
+lv_obj_t * ui_Low1;
+lv_obj_t * ui_High1;
+lv_obj_t * ui_introqelabel;
 lv_obj_t * ui_introqevalue;
+lv_obj_t * ui_introqeslider;
+lv_obj_t * ui_Low2;
+lv_obj_t * ui_High;
 lv_obj_t * ui_Batt4;
 lv_obj_t * ui_BattValue4;
 lv_obj_t * ui_Battery4;
@@ -122,6 +131,7 @@ lv_obj_t * ui_vibrate;
 lv_obj_t * ui_lefty;
 lv_group_t * ui_g_menue;
 
+
 ///////////////////// TEST LVGL SETTINGS ////////////////////
 #if LV_COLOR_DEPTH != 16
     #error "LV_COLOR_DEPTH should be 16bit to match SquareLine Studio's settings"
@@ -145,6 +155,9 @@ static void ui_event_StartButtonL(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
+    if(event == LV_EVENT_CLICKED) {
+        connectbutton(e);
+    }
 }
 static void ui_event_StartButtonM(lv_event_t * e)
 {
@@ -406,6 +419,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_add_event_cb(ui_Start, ui_event_Start, LV_EVENT_ALL, NULL);
 
+
     // ui_Logo
 
     ui_Logo = lv_label_create(ui_Start);
@@ -418,7 +432,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_Logo, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo, "OSSM REMOTE");
+    lv_label_set_text(ui_Logo, T_HEADER);
 
     lv_obj_set_style_text_font(ui_Logo, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_color(ui_Logo, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -457,7 +471,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_StartButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_StartButtonLText, "Connect");
+    lv_label_set_text(ui_StartButtonLText, T_CONNECT);
 
     lv_obj_set_style_text_color(ui_StartButtonLText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_StartButtonLText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -493,7 +507,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_StartButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_StartButtonMText, "Settings");
+    lv_label_set_text(ui_StartButtonMText, T_SETTINGS);
 
     lv_obj_set_style_text_color(ui_StartButtonMText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_StartButtonMText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -529,7 +543,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_StartButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_StartButtonRText, "Start");
+    lv_label_set_text(ui_StartButtonRText, T_DEMO);
 
     lv_obj_set_style_text_color(ui_StartButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_StartButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -578,7 +592,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_Welcome, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Welcome, "Welcome to OSSM M5 Remote");
+    lv_label_set_text(ui_Welcome, T_MOTD);
 
     // ui_Batt
 
@@ -592,7 +606,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_Batt, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Batt, "Batt");
+    lv_label_set_text(ui_Batt, T_BATT);
 
     // ui_BattValue
 
@@ -606,7 +620,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_BattValue, LV_ALIGN_RIGHT_MID);
 
-    lv_label_set_text(ui_BattValue, "");
+    lv_label_set_text(ui_BattValue, T_BLANK);
 
     // ui_Battery
 
@@ -651,7 +665,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_Logo2, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo2, "OSSM REMOTE");
+    lv_label_set_text(ui_Logo2, T_HEADER);
 
     lv_obj_set_style_text_font(ui_Logo2, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_color(ui_Logo2, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -692,7 +706,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_HomeButtonLText, "Creampie");
+    lv_label_set_text(ui_HomeButtonLText, T_CREAMPIE);
 
     lv_obj_set_style_text_color(ui_HomeButtonLText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_HomeButtonLText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -728,7 +742,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_HomeButtonMText, "Start/Stop");
+    lv_label_set_text(ui_HomeButtonMText, T_START);
 
     lv_obj_set_style_text_color(ui_HomeButtonMText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_HomeButtonMText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -764,7 +778,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_HomeButtonRText, "Menue");
+    lv_label_set_text(ui_HomeButtonRText, T_MENUE);
 
     lv_obj_set_style_text_color(ui_HomeButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_HomeButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -781,16 +795,14 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_SpeedL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SpeedL, "Speed:");
+    lv_label_set_text(ui_SpeedL, T_SPEED);
 
-    lv_obj_set_style_text_color(ui_SpeedL, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_SpeedL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_SpeedL, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_homespeedslider
 
     ui_homespeedslider = lv_slider_create(ui_SpeedL);
-    lv_slider_set_range(ui_homespeedslider, 0, 1200);
+    lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
     lv_slider_set_mode(ui_homespeedslider, LV_SLIDER_MODE_SYMMETRICAL);
 
     lv_obj_set_width(ui_homespeedslider, 130);
@@ -823,7 +835,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_homespeedvalue, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_homespeedvalue, "");
+    lv_label_set_text(ui_homespeedvalue, T_BLANK);
 
     // ui_DepthL
 
@@ -837,16 +849,14 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_DepthL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_DepthL, "Depth:");
+    lv_label_set_text(ui_DepthL, T_DEPTH);
 
-    lv_obj_set_style_text_color(ui_DepthL, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_DepthL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_DepthL, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_homedepthslider
 
     ui_homedepthslider = lv_slider_create(ui_DepthL);
-    lv_slider_set_range(ui_homedepthslider, 0, 180);
+    lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
 
     lv_obj_set_width(ui_homedepthslider, 130);
     lv_obj_set_height(ui_homedepthslider, 10);
@@ -878,7 +888,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_homedepthvalue, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_homedepthvalue, "");
+    lv_label_set_text(ui_homedepthvalue, T_BLANK);
 
     // ui_StrokeL
 
@@ -892,16 +902,14 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_StrokeL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_StrokeL, "Stroke:");
+    lv_label_set_text(ui_StrokeL, T_STROKE);
 
-    lv_obj_set_style_text_color(ui_StrokeL, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_StrokeL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_StrokeL, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_homestrokeslider
 
     ui_homestrokeslider = lv_slider_create(ui_StrokeL);
-    lv_slider_set_range(ui_homestrokeslider, 0, 100);
+    lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
 
     lv_obj_set_width(ui_homestrokeslider, 130);
     lv_obj_set_height(ui_homestrokeslider, 10);
@@ -933,7 +941,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_homestrokevalue, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_homestrokevalue, "");
+    lv_label_set_text(ui_homestrokevalue, T_BLANK);
 
     // ui_SensationL
 
@@ -947,10 +955,8 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_SensationL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SensationL, "Sensation:");
+    lv_label_set_text(ui_SensationL, T_SENSATION);
 
-    lv_obj_set_style_text_color(ui_SensationL, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_SensationL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_SensationL, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_homesensationslider
@@ -989,7 +995,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_Batt2, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Batt2, "Batt");
+    lv_label_set_text(ui_Batt2, T_BATT);
 
     // ui_BattValue2
 
@@ -1003,7 +1009,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_BattValue2, LV_ALIGN_RIGHT_MID);
 
-    lv_label_set_text(ui_BattValue2, "");
+    lv_label_set_text(ui_BattValue2, T_BLANK);
     lv_label_set_recolor(ui_BattValue2, "true");
 
     // ui_Battery2
@@ -1037,7 +1043,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomePatternLabel1, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_HomePatternLabel1, "Pattern:");
+    lv_label_set_text(ui_HomePatternLabel1, T_Patterns);
 
     lv_obj_set_style_text_font(ui_HomePatternLabel1, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -1053,7 +1059,21 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomePatternLabel, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_HomePatternLabel, "");
+    lv_label_set_text(ui_HomePatternLabel, T_BLANK);
+
+    // ui_connect
+
+    ui_connect = lv_label_create(ui_Home);
+
+    lv_obj_set_width(ui_connect, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_connect, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_connect, -113);
+    lv_obj_set_y(ui_connect, -102);
+
+    lv_obj_set_align(ui_connect, LV_ALIGN_CENTER);
+
+    lv_label_set_text(ui_connect, T_BLANK);
 
 }
 void ui_Menue_screen_init(void)
@@ -1079,7 +1099,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_Logo3, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo3, "OSSM REMOTE");
+    lv_label_set_text(ui_Logo3, T_HEADER);
 
     lv_obj_set_style_text_font(ui_Logo3, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_color(ui_Logo3, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1118,7 +1138,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_MenueButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_MenueButtonLText, "Settings");
+    lv_label_set_text(ui_MenueButtonLText, T_SETTINGS);
 
     lv_obj_set_style_text_color(ui_MenueButtonLText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_MenueButtonLText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1154,7 +1174,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_MenueButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_MenueButtonMText, "Home");
+    lv_label_set_text(ui_MenueButtonMText, T_HOME);
 
     lv_obj_set_style_text_color(ui_MenueButtonMText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_MenueButtonMText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1191,7 +1211,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_MenueButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_MenueButtonRText, "");
+    lv_label_set_text(ui_MenueButtonRText, T_BLANK);
 
     lv_obj_set_style_text_color(ui_MenueButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_MenueButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1208,7 +1228,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_Batt3, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Batt3, "Batt");
+    lv_label_set_text(ui_Batt3, T_BATT);
 
     // ui_BattValue3
 
@@ -1222,7 +1242,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_BattValue3, LV_ALIGN_RIGHT_MID);
 
-    lv_label_set_text(ui_BattValue3, "");
+    lv_label_set_text(ui_BattValue3, T_BLANK);
     lv_label_set_recolor(ui_BattValue3, "true");
 
     // ui_Battery3
@@ -1277,7 +1297,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_SDepthIL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SDepthIL, "Setup Depth Interactively");
+    lv_label_set_text(ui_SDepthIL, T_SETUP_DEPTH_I);
 
     lv_obj_set_style_text_color(ui_SDepthIL, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_SDepthIL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1314,7 +1334,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_SDepthFL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SDepthFL, "Setup Depth Fancy");
+    lv_label_set_text(ui_SDepthFL, T_SETUP_DEPTH_F);
 
     lv_obj_set_style_text_color(ui_SDepthFL, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_SDepthFL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1351,7 +1371,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_SPatternL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SPatternL, "Select Pattern");
+    lv_label_set_text(ui_SPatternL, T_SELECT_PATTERN);
 
     lv_obj_set_style_text_color(ui_SPatternL, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_SPatternL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1388,7 +1408,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_STorqeL, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_STorqeL, "Setup Torqe");
+    lv_label_set_text(ui_STorqeL, T_SETUP_TORQE);
 
     lv_obj_set_style_text_color(ui_STorqeL, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_STorqeL, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1427,7 +1447,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_EJECTSettingButtonText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_EJECTSettingButtonText, "EJECT Settings");
+    lv_label_set_text(ui_EJECTSettingButtonText, T_EJECT_SETTINGS);
 
     lv_obj_set_style_text_color(ui_EJECTSettingButtonText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_EJECTSettingButtonText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1463,7 +1483,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_Logo5, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo5, "OSSM REMOTE");
+    lv_label_set_text(ui_Logo5, T_HEADER);
 
     lv_obj_set_style_text_font(ui_Logo5, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_color(ui_Logo5, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1502,7 +1522,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_PatternButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_PatternButtonLText, "Menue");
+    lv_label_set_text(ui_PatternButtonLText, T_MENUE);
 
     lv_obj_set_style_text_color(ui_PatternButtonLText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_PatternButtonLText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1538,7 +1558,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_PatternButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_PatternButtonMText, "Home");
+    lv_label_set_text(ui_PatternButtonMText, T_HOME);
 
     lv_obj_set_style_text_color(ui_PatternButtonMText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_PatternButtonMText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1574,7 +1594,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_PatternButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_PatternButtonRText, "Save");
+    lv_label_set_text(ui_PatternButtonRText, T_SAVE);
 
     lv_obj_set_style_text_color(ui_PatternButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_PatternButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1591,7 +1611,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_Batt5, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Batt5, "Batt");
+    lv_label_set_text(ui_Batt5, T_BATT);
 
     // ui_BattValue5
 
@@ -1605,7 +1625,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_BattValue5, LV_ALIGN_RIGHT_MID);
 
-    lv_label_set_text(ui_BattValue5, "");
+    lv_label_set_text(ui_BattValue5, T_BLANK);
     lv_label_set_recolor(ui_BattValue5, "true");
 
     // ui_Battery5
@@ -1639,7 +1659,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_Label4, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Label4, "Select Pattern:");
+    lv_label_set_text(ui_Label4, T_SELECT_PATTERN);
 
     lv_obj_set_style_text_font(ui_Label4, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -1688,7 +1708,7 @@ void ui_Torqe_screen_init(void)
 
     lv_obj_set_align(ui_Logo4, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo4, "OSSM REMOTE");
+    lv_label_set_text(ui_Logo4, T_HEADER);
 
     lv_obj_set_style_text_font(ui_Logo4, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_color(ui_Logo4, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1727,7 +1747,7 @@ void ui_Torqe_screen_init(void)
 
     lv_obj_set_align(ui_TorqeButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_TorqeButtonLText, "");
+    lv_label_set_text(ui_TorqeButtonLText, T_BLANK);
 
     lv_obj_set_style_text_color(ui_TorqeButtonLText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_TorqeButtonLText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1763,7 +1783,7 @@ void ui_Torqe_screen_init(void)
 
     lv_obj_set_align(ui_TorqeButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_TorqeButtonMText, "Home");
+    lv_label_set_text(ui_TorqeButtonMText, T_HOME);
 
     lv_obj_set_style_text_color(ui_TorqeButtonMText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_TorqeButtonMText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1799,78 +1819,190 @@ void ui_Torqe_screen_init(void)
 
     lv_obj_set_align(ui_TorqeButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_TorqeButtonRText, "Menue");
+    lv_label_set_text(ui_TorqeButtonRText, T_MENUE);
 
     lv_obj_set_style_text_color(ui_TorqeButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_TorqeButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // ui_SpeedL1
+    // ui_outtroqelabel
 
-    ui_SpeedL1 = lv_label_create(ui_Torqe);
+    ui_outtroqelabel = lv_label_create(ui_Torqe);
 
-    lv_obj_set_width(ui_SpeedL1, lv_pct(70));
-    lv_obj_set_height(ui_SpeedL1, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_outtroqelabel, 60);
+    lv_obj_set_width(ui_outtroqelabel, lv_pct(93));
 
-    lv_obj_set_x(ui_SpeedL1, 20);
-    lv_obj_set_y(ui_SpeedL1, -40);
+    lv_obj_set_x(ui_outtroqelabel, 10);
+    lv_obj_set_y(ui_outtroqelabel, -45);
 
-    lv_obj_set_align(ui_SpeedL1, LV_ALIGN_LEFT_MID);
+    lv_obj_set_align(ui_outtroqelabel, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_SpeedL1, "Out Torqe:");
+    lv_label_set_text(ui_outtroqelabel, T_OUT_TORQE);
 
-    lv_obj_set_style_text_color(ui_SpeedL1, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_SpeedL1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(ui_SpeedL1, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_outtroqelabel, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_outtroqevalue
 
-    ui_outtroqevalue = lv_label_create(ui_SpeedL1);
+    ui_outtroqevalue = lv_label_create(ui_outtroqelabel);
 
     lv_obj_set_width(ui_outtroqevalue, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_outtroqevalue, LV_SIZE_CONTENT);
 
-    lv_obj_set_x(ui_outtroqevalue, 0);
-    lv_obj_set_y(ui_outtroqevalue, 2);
+    lv_obj_set_x(ui_outtroqevalue, 190);
+    lv_obj_set_y(ui_outtroqevalue, -14);
 
-    lv_obj_set_align(ui_outtroqevalue, LV_ALIGN_RIGHT_MID);
+    lv_obj_set_align(ui_outtroqevalue, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_outtroqevalue, "-180");
+    lv_label_set_text(ui_outtroqevalue, T_BLANK);
 
-    lv_obj_set_style_text_font(ui_outtroqevalue, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_outtroqevalue, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // ui_DepthL1
+    // ui_outtroqeslider
 
-    ui_DepthL1 = lv_label_create(ui_Torqe);
+    ui_outtroqeslider = lv_slider_create(ui_outtroqelabel);
+    lv_slider_set_range(ui_outtroqeslider, 50, 200);
+    lv_slider_set_value(ui_outtroqeslider, 180, LV_ANIM_OFF);
+    if(lv_slider_get_mode(ui_outtroqeslider) == LV_SLIDER_MODE_RANGE) lv_slider_set_left_value(ui_outtroqeslider, 0,
+                                                                                                   LV_ANIM_OFF);
 
-    lv_obj_set_width(ui_DepthL1, lv_pct(70));
-    lv_obj_set_height(ui_DepthL1, LV_SIZE_CONTENT);
+    lv_obj_set_width(ui_outtroqeslider, 195);
+    lv_obj_set_height(ui_outtroqeslider, 10);
 
-    lv_obj_set_x(ui_DepthL1, 20);
-    lv_obj_set_y(ui_DepthL1, 0);
+    lv_obj_set_x(ui_outtroqeslider, 50);
+    lv_obj_set_y(ui_outtroqeslider, 15);
 
-    lv_obj_set_align(ui_DepthL1, LV_ALIGN_LEFT_MID);
+    lv_obj_set_align(ui_outtroqeslider, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_DepthL1, "In Torqe:");
+    lv_obj_set_style_bg_color(ui_outtroqeslider, lv_color_hex(0xD691D0), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_outtroqeslider, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    lv_obj_set_style_text_color(ui_DepthL1, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_opa(ui_DepthL1, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(ui_DepthL1, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_outtroqeslider, lv_color_hex(0x83277B), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_outtroqeslider, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(ui_outtroqeslider, lv_color_hex(0x83277B), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_bg_color(ui_outtroqeslider, lv_color_hex(0x83277B), LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_outtroqeslider, 255, LV_PART_KNOB | LV_STATE_DEFAULT);
+
+    // ui_Low1
+
+    ui_Low1 = lv_label_create(ui_outtroqelabel);
+
+    lv_obj_set_width(ui_Low1, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_Low1, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_Low1, 0);
+    lv_obj_set_y(ui_Low1, 14);
+
+    lv_obj_set_align(ui_Low1, LV_ALIGN_LEFT_MID);
+
+    lv_label_set_text(ui_Low1, T_LOW);
+
+    lv_obj_set_style_text_font(ui_Low1, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ui_High1
+
+    ui_High1 = lv_label_create(ui_outtroqelabel);
+
+    lv_obj_set_width(ui_High1, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_High1, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_High1, 0);
+    lv_obj_set_y(ui_High1, 14);
+
+    lv_obj_set_align(ui_High1, LV_ALIGN_RIGHT_MID);
+
+    lv_label_set_text(ui_High1, T_HIGH);
+
+    lv_obj_set_style_text_font(ui_High1, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ui_introqelabel
+
+    ui_introqelabel = lv_label_create(ui_Torqe);
+
+    lv_obj_set_height(ui_introqelabel, 60);
+    lv_obj_set_width(ui_introqelabel, lv_pct(93));
+
+    lv_obj_set_x(ui_introqelabel, 10);
+    lv_obj_set_y(ui_introqelabel, 30);
+
+    lv_obj_set_align(ui_introqelabel, LV_ALIGN_LEFT_MID);
+
+    lv_label_set_text(ui_introqelabel, T_IN_TORQE);
+
+    lv_obj_set_style_text_font(ui_introqelabel, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_introqevalue
 
-    ui_introqevalue = lv_label_create(ui_DepthL1);
+    ui_introqevalue = lv_label_create(ui_introqelabel);
 
     lv_obj_set_width(ui_introqevalue, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_introqevalue, LV_SIZE_CONTENT);
 
-    lv_obj_set_x(ui_introqevalue, 0);
-    lv_obj_set_y(ui_introqevalue, 0);
+    lv_obj_set_x(ui_introqevalue, 190);
+    lv_obj_set_y(ui_introqevalue, -14);
 
-    lv_obj_set_align(ui_introqevalue, LV_ALIGN_RIGHT_MID);
+    lv_obj_set_align(ui_introqevalue, LV_ALIGN_LEFT_MID);
 
-    lv_label_set_text(ui_introqevalue, "100");
+    lv_label_set_text(ui_introqevalue, T_BLANK);
 
-    lv_obj_set_style_text_font(ui_introqevalue, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_introqevalue, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ui_introqeslider
+
+    ui_introqeslider = lv_slider_create(ui_introqelabel);
+    lv_slider_set_range(ui_introqeslider, 20, 200);
+    lv_slider_set_value(ui_introqeslider, 100, LV_ANIM_OFF);
+    if(lv_slider_get_mode(ui_introqeslider) == LV_SLIDER_MODE_RANGE) lv_slider_set_left_value(ui_introqeslider, 0,
+                                                                                                  LV_ANIM_OFF);
+
+    lv_obj_set_width(ui_introqeslider, 195);
+    lv_obj_set_height(ui_introqeslider, 10);
+
+    lv_obj_set_x(ui_introqeslider, 50);
+    lv_obj_set_y(ui_introqeslider, 15);
+
+    lv_obj_set_align(ui_introqeslider, LV_ALIGN_LEFT_MID);
+
+    lv_obj_set_style_bg_color(ui_introqeslider, lv_color_hex(0xD691D0), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_introqeslider, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_bg_color(ui_introqeslider, lv_color_hex(0x83277B), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_introqeslider, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(ui_introqeslider, lv_color_hex(0x83277B), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_bg_color(ui_introqeslider, lv_color_hex(0x83277B), LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_introqeslider, 255, LV_PART_KNOB | LV_STATE_DEFAULT);
+
+    // ui_Low2
+
+    ui_Low2 = lv_label_create(ui_introqelabel);
+
+    lv_obj_set_width(ui_Low2, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_Low2, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_Low2, 0);
+    lv_obj_set_y(ui_Low2, 14);
+
+    lv_obj_set_align(ui_Low2, LV_ALIGN_LEFT_MID);
+
+    lv_label_set_text(ui_Low2, T_LOW);
+
+    lv_obj_set_style_text_font(ui_Low2, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ui_High
+
+    ui_High = lv_label_create(ui_introqelabel);
+
+    lv_obj_set_width(ui_High, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_High, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_High, 0);
+    lv_obj_set_y(ui_High, 14);
+
+    lv_obj_set_align(ui_High, LV_ALIGN_RIGHT_MID);
+
+    lv_label_set_text(ui_High, T_HIGH);
+
+    lv_obj_set_style_text_font(ui_High, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_Batt4
 
@@ -1884,7 +2016,7 @@ void ui_Torqe_screen_init(void)
 
     lv_obj_set_align(ui_Batt4, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Batt4, "Batt");
+    lv_label_set_text(ui_Batt4, T_BATT);
 
     // ui_BattValue4
 
@@ -1898,7 +2030,7 @@ void ui_Torqe_screen_init(void)
 
     lv_obj_set_align(ui_BattValue4, LV_ALIGN_RIGHT_MID);
 
-    lv_label_set_text(ui_BattValue4, "");
+    lv_label_set_text(ui_BattValue4, T_BLANK);
     lv_label_set_recolor(ui_BattValue4, "true");
 
     // ui_Battery4
@@ -1944,7 +2076,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_set_align(ui_Logo6, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo6, "OSSM REMOTE");
+    lv_label_set_text(ui_Logo6, T_HEADER);
 
     lv_obj_set_style_text_font(ui_Logo6, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_color(ui_Logo6, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2019,7 +2151,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_set_align(ui_EJECTButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_EJECTButtonMText, "Home");
+    lv_label_set_text(ui_EJECTButtonMText, T_HOME);
 
     lv_obj_set_style_text_color(ui_EJECTButtonMText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_EJECTButtonMText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2055,7 +2187,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_set_align(ui_EJECTButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_EJECTButtonRText, "Menue");
+    lv_label_set_text(ui_EJECTButtonRText, T_MENUE);
 
     lv_obj_set_style_text_color(ui_EJECTButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_EJECTButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2072,7 +2204,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_set_align(ui_Batt6, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Batt6, "Batt");
+    lv_label_set_text(ui_Batt6, T_BATT);
 
     // ui_BattValue6
 
@@ -2086,7 +2218,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_set_align(ui_BattValue6, LV_ALIGN_RIGHT_MID);
 
-    lv_label_set_text(ui_BattValue6, "");
+    lv_label_set_text(ui_BattValue6, T_BLANK);
     lv_label_set_recolor(ui_BattValue6, "true");
 
     // ui_Battery6
@@ -2132,7 +2264,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_Logo1, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo1, "OSSM REMOTE");
+    lv_label_set_text(ui_Logo1, T_HEADER);
 
     lv_obj_set_style_text_font(ui_Logo1, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_color(ui_Logo1, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2171,7 +2303,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_SettingsButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SettingsButtonLText, "Save");
+    lv_label_set_text(ui_SettingsButtonLText, T_SAVE);
 
     lv_obj_set_style_text_color(ui_SettingsButtonLText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_SettingsButtonLText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2207,7 +2339,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_SettingsButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SettingsButtonMText, "Home");
+    lv_label_set_text(ui_SettingsButtonMText, T_HOME);
 
     lv_obj_set_style_text_color(ui_SettingsButtonMText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_SettingsButtonMText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2243,7 +2375,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_SettingsButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SettingsButtonRText, "Menue");
+    lv_label_set_text(ui_SettingsButtonRText, T_MENUE);
 
     lv_obj_set_style_text_color(ui_SettingsButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_SettingsButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -2260,7 +2392,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_Batt1, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Batt1, "Batt");
+    lv_label_set_text(ui_Batt1, T_BATT);
 
     // ui_BattValue1
 
@@ -2274,7 +2406,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_BattValue1, LV_ALIGN_RIGHT_MID);
 
-    lv_label_set_text(ui_BattValue1, "");
+    lv_label_set_text(ui_BattValue1, T_BLANK);
     lv_label_set_recolor(ui_BattValue1, "true");
 
     // ui_Battery1
@@ -2299,7 +2431,7 @@ void ui_Settings_screen_init(void)
     // ui_ejectaddon
 
     ui_ejectaddon = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(ui_ejectaddon, "EJECT");
+    lv_checkbox_set_text(ui_ejectaddon, T_EJECT);
 
     lv_obj_set_width(ui_ejectaddon, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_ejectaddon, LV_SIZE_CONTENT);
@@ -2321,7 +2453,7 @@ void ui_Settings_screen_init(void)
     // ui_darkmode
 
     ui_darkmode = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(ui_darkmode, "Dark Mode");
+    lv_checkbox_set_text(ui_darkmode, T_DARKM);
 
     lv_obj_set_width(ui_darkmode, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_darkmode, LV_SIZE_CONTENT);
@@ -2335,13 +2467,13 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_style_text_font(ui_darkmode, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    lv_obj_set_style_border_color(ui_darkmode, lv_color_hex(0x83247B), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(ui_darkmode, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    //lv_obj_set_style_border_color(ui_darkmode, lv_color_hex(0x83247B), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    //lv_obj_set_style_border_opa(ui_darkmode, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
     // ui_vibrate
 
     ui_vibrate = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(ui_vibrate, "Vibrate");
+    lv_checkbox_set_text(ui_vibrate, T_VIBRATE);
 
     lv_obj_set_width(ui_vibrate, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_vibrate, LV_SIZE_CONTENT);
@@ -2361,7 +2493,7 @@ void ui_Settings_screen_init(void)
     // ui_lefty
 
     ui_lefty = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(ui_lefty, "Lefty");
+    lv_checkbox_set_text(ui_lefty, T_BLANK);
 
     lv_obj_set_width(ui_lefty, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_lefty, LV_SIZE_CONTENT);
@@ -2383,8 +2515,7 @@ void ui_Settings_screen_init(void)
 void ui_init(void)
 {
     lv_disp_t * dispp = lv_disp_get_default();
-    lv_theme_t * theme = lv_theme_default_init(dispp, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED),
-                                               false, LV_FONT_DEFAULT);
+    lv_theme_t * theme = lv_theme_default_init(dispp, lv_color_hex(0x83247B), lv_color_hex(0xD591D5), dark_mode, LV_FONT_DEFAULT);
     lv_disp_set_theme(dispp, theme);
     ui_Start_screen_init();
     ui_Home_screen_init();
@@ -2395,4 +2526,3 @@ void ui_init(void)
     ui_Settings_screen_init();
     lv_disp_load_scr(ui_Start);
 }
-
