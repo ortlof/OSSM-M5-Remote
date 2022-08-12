@@ -74,7 +74,7 @@ PCB Files in Folder
 
 1. Setup Plaformio: https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation
 2. Clone or Download This Repo for the Remote 
-3. Clone or Download this Repo for the OSSM https://github.com/ortlof/OSSM-Stroke/tree/OSSM_ESP_Remote
+3. Clone or Download this Repo for the OSSM https://github.com/ortlof/OSSM-Stroke
 4. Flash Code Like Described in this Readme https://github.com/KinkyMakers/OSSM-hardware/blob/master/OSSM%20PlatformIO%20Readme.md
 
 OSSM Remote and OSSM works out of the box right now with 0xFF Broadcast Adresses
