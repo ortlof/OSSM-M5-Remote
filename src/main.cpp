@@ -1,3 +1,4 @@
+#pragma GCC optimize ("Ofast")
 #include <M5Core2.h>
 #include <ESP32Encoder.h>
 #include <esp_now.h>
@@ -5,6 +6,16 @@
 #include <PatternMath.h>
 #include "OneButton.h"          //For Button Debounce and Longpress
 #include "config.h"
+#include <Arduino.h>
+#include <Wire.h>
+#include <lvgl.h>
+#include <SPI.h>
+#include "ui/ui.h"
+#include <EEPROM.h>
+#include "main.h"
+
+int screenWidth  = 320;
+int screenHeight = 240;
 
 ///////////////////////////////////////////
 ////
@@ -26,6 +37,22 @@
 #define OFF 0.0
 #define ON 1.0
 
+// Screens 
+
+#define ST_UI_START 0
+#define ST_UI_HOME 1
+
+#define ST_UI_MENUE 10
+#define ST_UI_PATTERN 11
+#define ST_UI_Torqe 12
+#define ST_UI_EJECTSETTINGS 13
+
+#define ST_UI_SETTINGS 20
+
+int st_screens = ST_UI_START;
+
+
+
 // Menü States
 
 #define CONNECT 0
@@ -39,6 +66,18 @@
 #define CUM_MENUE 20
 
 int menuestatus = CONNECT;
+
+// EEPROM Area:
+
+#define EJECT 0
+#define DARKMODE 1
+#define VIBRATE 2
+#define LEFTY 3
+
+bool eject_status = false;
+bool dark_mode = false;
+bool vibrate_mode = true;
+bool lefty_mode = false;
 
 // Command States
 #define CONN 0
@@ -60,8 +99,8 @@ int menuestatus = CONNECT;
 #define CUMSIZE   22
 #define CUMACCEL  23
 
-
-
+#define CONNECT 88
+#define HEARTBEAT 99
 
 int displaywidth;
 int displayheight;
@@ -72,7 +111,8 @@ int S2Pos;
 int S3Pos;
 int S4Pos;
 bool rstate = false;
-int pattern = 1;
+int pattern = 2;
+char patternstr[20];
 bool onoff = false;
 
 long speedenc = 0;
@@ -85,14 +125,15 @@ long cum_t_enc = 0;
 long cum_si_enc =0;
 long cum_s_enc = 0;
 long cum_a_enc = 0;
-long menue_enc = 0;
+long encoder4_enc = 0;
+
+extern float maxdepthinmm = 180.0;
+extern float speedlimit = 1200;
 
 float speed = 0.0;
 float depth = 0.0;
 float stroke = 0.0;
 float sensation = 0.0;
-float maxdepthinmm = 180.0;
-float speedlimit = 1200;
 float torqe_f = 100.0;
 float torqe_r = -180.0;
 float cum_time = 0.0;
@@ -117,7 +158,7 @@ bool out_esp_rstate;
 bool out_esp_connected;
 int out_esp_command;
 float out_esp_value;
-
+int out_esp_target;
 
 float incoming_esp_speed;
 float incoming_esp_depth;
@@ -126,7 +167,8 @@ float incoming_esp_sensation;
 float incoming_esp_pattern;
 bool incoming_esp_rstate;
 bool incoming_esp_connected;
-
+bool incoming_esp_heartbeat;
+int incoming_esp_target;
 
 typedef struct struct_message {
   float esp_speed;
@@ -136,46 +178,127 @@ typedef struct struct_message {
   float esp_pattern;
   bool esp_rstate;
   bool esp_connected;
+  bool esp_heartbeat;
   int esp_command;
   float esp_value;
+  int esp_target;
 } struct_message;
 
 bool esp_connect = false;
+bool m5_first_connect = false;
 
 struct_message outgoingcontrol;
 struct_message incomingcontrol;
 
 esp_now_peer_info_t peerInfo;
 
+unsigned long Heartbeat_Time = 0;
+const long Heartbeat_Interval = 10000;
+
+// Bool
+
+bool EJECT_On = false;
+bool OSSM_On = false;
+
+#define EEPROM_SIZE 200
+
+// Tasks:
 
 TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
-TaskHandle_t vibrate_t  = nullptr; // Vibration Task
-TaskHandle_t home_t     = nullptr; // Homescreen Task
-TaskHandle_t menue_t    = nullptr;
-TaskHandle_t torqe_t    = nullptr;
-TaskHandle_t cum_t      = nullptr; 
+
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
-void vibrationTask(void *pvParameters); // Handels the EspNow Remote
-void homescreentask(void *pvParameters); // Handels the Homescreen
-void menuescreentask(void *pvParameters); // Handels the Menue Screen
-void torqescreentask(void *pvParameters); // Handels Torqe Settings Display
-void cumscreentask(void *pvParameters); // Handels Lube Display
-void menueUpdate(int select); //Handels update of Menue
-void drawdisplay(int display); //Handels Display Drawing
 bool connectbtn(); //Handels Connectbtn
-void menue_state_machine(int menuestate);
-void updatepowerbars();
 int64_t touchmenue();
 void vibrate();
 void mxclick();
+bool mxclick_short_waspressed = false;
 void mxlong();
+bool mxclick_long_waspressed = false;
 void click2();
+bool click2_short_waspressed = false;
 void click3();
+bool click3_short_waspressed = false;
 
-void powerBar(int x, int y, int w, int h, uint8_t val) {
-  M5.lcd.drawRect(x, y, w, h, FrontColor);
-  M5.lcd.fillRect(x + 1, y + 1, w * (((float)100) / 100.0), h - 1, BgColor);
-  M5.lcd.fillRect(x + 1, y + 1, w * (((float)val) / 100.0), h - 1, FrontColor);
+// init the tft espi
+static lv_disp_draw_buf_t draw_buf;
+static lv_disp_drv_t disp_drv;  // Descriptor of a display driver
+static lv_indev_drv_t indev_drv; // Descriptor of a touch driver
+
+M5Display *tft;
+static lv_obj_t * kb;
+
+void tft_lv_initialization() {
+  M5.begin();
+  lv_init();
+  static lv_color_t buf1[(LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10];  // Declare a buffer for 1/10 screen siz
+  static lv_color_t buf2[(LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10];  // second buffer is optionnal
+
+  // Initialize `disp_buf` display buffer with the buffer(s).
+  lv_disp_draw_buf_init(&draw_buf, buf1, buf2, (LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10);
+
+  tft = &M5.Lcd;
+}
+
+// Display flushing
+void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+  uint32_t w = (area->x2 - area->x1 + 1);
+  uint32_t h = (area->y2 - area->y1 + 1);
+
+  tft->startWrite();
+  tft->setAddrWindow(area->x1, area->y1, w, h);
+  tft->pushColors((uint16_t *)&color_p->full, w * h, true);
+  tft->endWrite();
+
+  lv_disp_flush_ready(disp);
+}
+
+void init_disp_driver() {
+  lv_disp_drv_init(&disp_drv);  // Basic initialization
+
+  disp_drv.flush_cb = my_disp_flush;  // Set your driver function
+  disp_drv.draw_buf = &draw_buf;      // Assign the buffer to the display
+  disp_drv.hor_res = LV_HOR_RES_MAX;  // Set the horizontal resolution of the display
+  disp_drv.ver_res = LV_VER_RES_MAX;  // Set the vertical resolution of the display
+
+  lv_disp_drv_register(&disp_drv);                   // Finally register the driver
+  lv_disp_set_bg_color(NULL, lv_color_hex3(0x000));  // Set default background color to black
+}
+
+void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
+{
+  TouchPoint_t pos = M5.Touch.getPressPoint();
+  bool touched = ( pos.x == -1 ) ? false : true;  
+
+  if(!touched) {
+      data->state = LV_INDEV_STATE_RELEASED;
+  } else {
+    if (M5.BtnA.wasPressed()){  // tab 1 : A Button
+      LogDebug("ButtonA");
+      data->point.x = 80; data->point.y = 220; // mouse position x,y
+      data->state =LV_INDEV_STATE_PR; M5.update();
+      } else if (M5.BtnB.wasPressed()){  // tab 2 : B Button
+      LogDebug("ButtonB");
+      data->point.x = 160; data->point.y = 220;
+      data->state =LV_INDEV_STATE_PR; M5.update();
+      } else if (M5.BtnC.wasPressed()){  // tab 3 : C Button
+      LogDebug("ButtonC");
+      data->point.x = 270; data->point.y = 220;
+      data->state =LV_INDEV_STATE_PR; M5.update();
+      } else {
+    data->state = LV_INDEV_STATE_PRESSED; 
+    data->point.x = pos.x;
+    data->point.y = pos.y;
+  } 
+}
+}
+
+void init_touch_driver() {
+  lv_disp_drv_register(&disp_drv);
+
+  lv_indev_drv_init(&indev_drv);
+  indev_drv.type = LV_INDEV_TYPE_POINTER;
+  indev_drv.read_cb = my_touchpad_read;
+  lv_indev_t * my_indev = lv_indev_drv_register(&indev_drv);  // register
 }
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -183,71 +306,174 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
-  LogDebug("Bytes received: ");
-  LogDebug(len);
 
-  if(esp_connect == false && incomingcontrol.esp_connected == true){  
+  if(incomingcontrol.esp_target == M5_ID && incomingcontrol.esp_connected == true && m5_first_connect == false){
     speedlimit = incomingcontrol.esp_speed;
     maxdepthinmm = incomingcontrol.esp_depth;
     pattern = incomingcontrol.esp_pattern;
-    outgoingcontrol.esp_connected = false;
-    esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    outgoingcontrol.esp_target = OSSM_ID;
+    esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     LogDebug(result);
     if (result == ESP_OK) {
-      esp_connect = true;
-      outgoingcontrol.esp_connected = true;
-      M5.Lcd.setCursor(5,20);
-      M5.Lcd.setFont(&FreeSansBold9pt7b);
-      M5.Lcd.setTextColor(FrontColor);
-      M5.Lcd.print(T_CON);
-      M5.Lcd.fillScreen(WHITE);
-      menue_state_machine(HOME);
-      menuestatus = HOME;
-      menueUpdate(2);
-      delay(200);
-      vTaskResume(home_t);
+      m5_first_connect = true;
+      lv_label_set_text(ui_connect, "Connected");
+      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
-  } 
+  }
+  switch(incomingcontrol.esp_command)
+    {
+    case OFF: 
+    {
+    lv_obj_clear_state(ui_HomeButtonM, LV_STATE_CHECKED);
+    OSSM_On = false;
+    }
+    break;
+    case ON:
+    {
+    lv_obj_add_state(ui_HomeButtonM, LV_STATE_CHECKED);
+    OSSM_On = true;
+    }
+    break;
+    }
 }
 
 //Sends Commands and Value to Remote device returns ture or false if sended
 bool SendCommand(int Command, float Value, int Target){
-      if(esp_connect == true){
-      switch (Target){
-      case OSSM:
-      {
+      if(m5_first_connect == true){
       outgoingcontrol.esp_connected = true;
       outgoingcontrol.esp_command = Command;
       outgoingcontrol.esp_value = Value;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      outgoingcontrol.esp_target = Target;
+      esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       if (result == ESP_OK) {
       return true;
       } else {
+      delay(20);
+      esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       return false;
-      }
-      }
-      break;
-      case CUM:
-      {
-      outgoingcontrol.esp_connected = true;
-      outgoingcontrol.esp_command = Command;
-      outgoingcontrol.esp_value = Value;
-      LogDebug(Command);
-      LogDebug(Value);
-      esp_err_t result = esp_now_send(CUM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
-      return true;
-      } else {
-      return false;
-      } 
-      break;
-      }
       }
       }
 }
 
+void connectbutton(lv_event_t * e)
+{
+    if(m5_first_connect == false){
+    outgoingcontrol.esp_command = HEARTBEAT;
+    outgoingcontrol.esp_heartbeat = true;
+    outgoingcontrol.esp_target = OSSM_ID;
+    esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    }
+}
+
+void savesettings(lv_event_t * e)
+{
+	if(lv_obj_get_state(ui_ejectaddon) == 1){
+		EEPROM.writeBool(EJECT,true);
+	} else if(lv_obj_get_state(ui_ejectaddon) == 0){
+		EEPROM.writeBool(EJECT,false);
+	}
+  if(lv_obj_get_state(ui_darkmode) == 1){
+		EEPROM.writeBool(DARKMODE,true);
+	} else if(lv_obj_get_state(ui_darkmode) == 0){
+		EEPROM.writeBool(DARKMODE,false);
+	}
+  if(lv_obj_get_state(ui_vibrate) == 1){
+		EEPROM.writeBool(VIBRATE,true);
+	} else if(lv_obj_get_state(ui_vibrate) == 0){
+		EEPROM.writeBool(VIBRATE,false);
+	}
+  if(lv_obj_get_state(ui_lefty) == 1){
+		EEPROM.writeBool(LEFTY,true);
+	} else if(lv_obj_get_state(ui_lefty) == 0){
+		EEPROM.writeBool(LEFTY,false);
+	}
+  EEPROM.commit();
+  delay(20);
+  ESP.restart();
+}
+
+void screenmachine(lv_event_t * e)
+{
+  if (lv_scr_act() == ui_Start){
+    st_screens = ST_UI_START;
+  } else if (lv_scr_act() == ui_Home){
+    st_screens = ST_UI_HOME;
+    speed = lv_slider_get_value(ui_homespeedslider);
+    speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
+    encoder1.setCount(speedenc); 
+
+    depth = lv_slider_get_value(ui_homedepthslider);       
+    depthenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, depth, 0);
+    encoder2.setCount(depthenc);
+            
+    stroke = lv_slider_get_value(ui_homestrokeslider);    
+    strokeenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, stroke, 0);
+    encoder3.setCount(strokeenc);
+
+    sensation = lv_slider_get_value(ui_homesensationslider);
+    sensationenc =  fscale(-100, 100, (Encoder_MAP/2*-1), (Encoder_MAP/2), sensation, 0);
+    encoder4.setCount(sensationenc);        
+            
+  } else if (lv_scr_act() == ui_Menue){
+    st_screens = ST_UI_MENUE;
+  } else if (lv_scr_act() == ui_Pattern){
+    st_screens = ST_UI_PATTERN;
+  } else if (lv_scr_act() == ui_Torqe){
+    st_screens = ST_UI_Torqe;
+    torqe_f = lv_slider_get_value(ui_outtroqeslider);
+    torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
+    encoder1.setCount(torqe_f_enc);
+
+    torqe_r = lv_slider_get_value(ui_introqeslider);
+    torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
+    encoder4.setCount(torqe_r_enc);
+
+  } else if (lv_scr_act() == ui_EJECTSettings){
+    st_screens = ST_UI_EJECTSETTINGS;
+  } else if (lv_scr_act() == ui_Settings){
+    st_screens = ST_UI_SETTINGS;
+  }
+}
+
+void ejectcreampie(lv_event_t * e){
+  if(EJECT_On == true){
+    lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+    EJECT_On = false;
+  } else if(EJECT_On == false){
+    lv_obj_add_state(ui_HomeButtonL, LV_STATE_CHECKED);
+    EJECT_On = true;
+  } 
+}
+
+void savepattern(lv_event_t * e){
+  pattern = lv_roller_get_selected(ui_PatternS);
+  lv_roller_get_selected_str(ui_PatternS,patternstr,0);
+  lv_label_set_text(ui_HomePatternLabel,patternstr);
+  LogDebug(pattern);
+  float patterns = pattern;
+  SendCommand(PATTERN, patterns, OSSM_ID);
+}
+
+void homebuttonmevent(lv_event_t * e){
+  LogDebug("HomeButton");
+  if(OSSM_On == false){
+    SendCommand(ON, 0.0, OSSM_ID);
+  } else if(OSSM_On == true){
+    SendCommand(OFF, 0.0, OSSM_ID);
+  }
+}
+
+void setupDepthInter(lv_event_t * e){
+    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
+}
+
+void setupdepthF(lv_event_t * e){
+    SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
+}
+
 void setup(){
   M5.begin(true, false, true, true); //Init M5Core2.
+  EEPROM.begin(EEPROM_SIZE);
   M5.Axp.SetLcdVoltage(3000);
   LogDebug("\n Starting");      // Start LogDebug 
   
@@ -261,51 +487,6 @@ void setup(){
                             0);                 /* pin task to core 0 */
   delay(100);
 
-  xTaskCreatePinnedToCore(homescreentask,     /* Task function. */
-                            "homescreentask", /* name of task. */
-                            6072,                /* Stack size of task */
-                            NULL,                /* parameter of the task */
-                            1,                   /* priority of the task */
-                            &home_t,            /* Task handle to keep track of created task */
-                            0);                  /* pin task to core 0 */
-  vTaskSuspend(home_t);
-
-  xTaskCreatePinnedToCore(menuescreentask,     /* Task function. */
-                            "menuescreentask", /* name of task. */
-                            4096,                /* Stack size of task */
-                            NULL,                /* parameter of the task */
-                            1,                   /* priority of the task */
-                            &menue_t,            /* Task handle to keep track of created task */
-                            0);                  /* pin task to core 0 */
-  vTaskSuspend(menue_t);
-
-  xTaskCreatePinnedToCore(torqescreentask,     /* Task function. */
-                            "torqescreentask", /* name of task. */
-                            4096,                /* Stack size of task */
-                            NULL,                /* parameter of the task */
-                            1,                   /* priority of the task */
-                            &torqe_t,            /* Task handle to keep track of created task */
-                            0);                  /* pin task to core 0 */
-  vTaskSuspend(torqe_t);
-
-  xTaskCreatePinnedToCore(vibrationTask,     /* Task function. */
-                            "vibrationTask", /* name of task. */
-                            2048,                /* Stack size of task */
-                            NULL,                /* parameter of the task */
-                            1,                   /* priority of the task */
-                            &vibrate_t,            /* Task handle to keep track of created task */
-                            0);                  /* pin task to core 0 */
-  vTaskSuspend(vibrate_t);
-
-  xTaskCreatePinnedToCore(cumscreentask,     /* Task function. */
-                            "cumscreentask", /* name of task. */
-                            4096,                /* Stack size of task */
-                            NULL,                /* parameter of the task */
-                            1,                   /* priority of the task */
-                            &cum_t,            /* Task handle to keep track of created task */
-                            0);                  /* pin task to core 0 */
-  vTaskSuspend(cum_t);
-
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
@@ -314,295 +495,315 @@ void setup(){
   Button1.attachLongPressStop(mxlong);
   Button2.attachClick(click2);
   Button3.attachClick(click3);
-  displaywidth = M5.Lcd.width();
-  displayheight = M5.Lcd.height();
 
-  S4Pos = displayheight - 40 - progheight;
-  S3Pos = S4Pos - progheight - distheight;
-  S2Pos = S3Pos - progheight - distheight;
-  S1Pos = S2Pos - progheight - distheight;
+  tft_lv_initialization();
+  init_disp_driver();
+  init_touch_driver();
 
-  drawdisplay(HOME);
-  menueUpdate(0);
-  powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
-  powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
-  powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
-  powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
 
-  encoder4.setCount(Encoder_MAP*0.5);
+  //****Load EEPROOM:
+  eject_status = EEPROM.readBool(EJECT);
+  dark_mode = EEPROM.readBool(DARKMODE);
+  vibrate_mode = EEPROM.readBool(VIBRATE);
+  lefty_mode = EEPROM.readBool(LEFTY);
+
+  ui_init();
+  
+  if(eject_status == true){
+  lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
+  lv_obj_clear_state(ui_EJECTSettingButton, LV_STATE_DISABLED);
+  lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
+  }
+  if(dark_mode == true){
+  lv_obj_add_state(ui_darkmode, LV_STATE_CHECKED);
+  }
+  if(vibrate_mode == true){
+  lv_obj_add_state(ui_vibrate, LV_STATE_CHECKED);
+  }
+  if(lefty_mode == true){
+  lv_obj_add_state(ui_lefty, LV_STATE_CHECKED);
+  }
+  lv_roller_set_selected(ui_PatternS,2,LV_ANIM_OFF);
+  lv_roller_get_selected_str(ui_PatternS,patternstr,0);
+  lv_label_set_text(ui_HomePatternLabel,patternstr);
 }
 
 void loop()
 {
+     const int BatteryLevel = M5.Axp.GetBatteryLevel();
+     String BatteryValue = (String(BatteryLevel, DEC) + "%");
+     const char *battVal = BatteryValue.c_str();
+     lv_bar_set_value(ui_Battery, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue, battVal);
+     lv_bar_set_value(ui_Battery1, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue1, battVal);
+     lv_bar_set_value(ui_Battery2, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue2, battVal);
+     lv_bar_set_value(ui_Battery3, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue3, battVal);
+     lv_bar_set_value(ui_Battery4, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue4, battVal);
+     lv_bar_set_value(ui_Battery5, BatteryLevel, LV_ANIM_OFF);
+     lv_label_set_text(ui_BattValue5, battVal);
+
      M5.update();
+     lv_task_handler();
      Button1.tick();
      Button2.tick();
      Button3.tick();
-     //LogDebug(digitalRead(ENCBUTTON1));
-     //LogDebug(digitalRead(ENCBUTTON2));
-     //LogDebug(analogReadMilliVolts(ANALOGIN));
-     //LogDebug(M5.Axp.GetBatVoltage());
-     switch(menuestatus){
-      case CONNECT:
+
+     switch(st_screens){
+      
+     case ST_UI_START:
       {
-      if(M5.BtnC.wasReleased()) {
-      outgoingcontrol.esp_connected = false;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      vibrate();
-      delay(100);
-      }
-
-      if(M5.BtnA.wasReleased()) {
-      esp_connect = true;
-      outgoingcontrol.esp_connected = true;
-      M5.Lcd.setCursor(5,20);
-      M5.Lcd.setFont(&FreeSansBold9pt7b);
-      M5.Lcd.setTextColor(FrontColor);
-      M5.Lcd.print(T_CON);
-      M5.Lcd.fillScreen(WHITE);
-      menue_state_machine(HOME);
-      menuestatus = HOME;
-      menueUpdate(2);
-      delay(200);
-      vTaskResume(home_t);
-      }
-
-      }
-      break;
-      
-      case HOME:
-      if(M5.BtnA.wasReleased()) {
-      speedenc = encoder1.getCount();
-      speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
-      SendCommand(SPEED, speed, OSSM);
-      depthenc = encoder2.getCount();
-      depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
-      SendCommand(DEPTH, depth, OSSM);
-      strokeenc = encoder3.getCount();
-      stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
-      SendCommand(STROKE, stroke, OSSM);
-      sensationenc = encoder4.getCount();
-      sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
-      SendCommand(SENSATION, sensation, OSSM);
-      SendCommand(ON, 0, OSSM);
-      menueUpdate(1);
-      vibrate();
-      }
-
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(MENUE);
-      vibrate();
-      }
-  
-      if(M5.BtnC.wasReleased()) {
-      SendCommand(OFF, 0, OSSM);
-      menueUpdate(2);
-      vibrate();
+        if(click2_short_waspressed == true){
+         lv_event_send(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_event_send(ui_StartButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_event_send(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
+        }
       }
       break;
 
-      case MENUE:
-     {
-      switch(touchmenue()){
-        case 1:
-        menue_state_machine(HOME);
-        SendCommand(SETUP_D_I, 0, OSSM);
-        updatepowerbars();
-      vibrate();
-        break;
-        case 2:
-        menue_state_machine(HOME);
-        SendCommand(SETUP_D_I_F, 0, OSSM);
-        updatepowerbars();
-      vibrate();
-        break;
-        case 3:
-        menue_state_machine(PATTERN_MENUE);
-      vibrate();
-        break;
-        case 4:
-        menue_state_machine(TORQE);
-        vibrate();
-        break;
-      }
-      
-      if(M5.BtnA.wasReleased()) {
-      menue_state_machine(CUM_MENUE);
-      vibrate();
-      delay(100);
-      }
+      case ST_UI_HOME:
+      {
+        // Encoder 1 Speed 
+        if(lv_slider_is_dragged(ui_homespeedslider) == false){
+          if (encoder1.getCount() != speedenc){
+            lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
+            if(encoder1.getCount() <= 0){
+              encoder1.setCount(0);
+            } else if (encoder1.getCount() >= Encoder_MAP){
+              encoder1.setCount(Encoder_MAP);
+            } 
+            speedenc = encoder1.getCount();
+            speed = fscale(0, Encoder_MAP, 0, speedlimit, speedenc, 0);
+            SendCommand(SPEED, speed, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_homespeedslider) != speed){
+            speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
+            encoder1.setCount(speedenc);
+            speed = lv_slider_get_value(ui_homespeedslider);
+            SendCommand(SPEED, speed, OSSM_ID);
+        }
+        char speed_v[7];
+        dtostrf(speed, 6, 0, speed_v);
+        lv_label_set_text(ui_homespeedvalue, speed_v);
 
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      }
 
-      if(M5.BtnC.wasReleased()) {
-      menue_state_machine(MENUE2);
+        // Encoder2 Depth
+        if(lv_slider_is_dragged(ui_homedepthslider) == false){
+          if (encoder2.getCount() != depthenc){
+            lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
+            if(encoder2.getCount() <= 0){
+              encoder2.setCount(0);
+            } else if (encoder2.getCount() >= Encoder_MAP){
+              encoder2.setCount(Encoder_MAP);
+            } 
+            depthenc = encoder2.getCount();
+            depth = fscale(0, Encoder_MAP, 0, maxdepthinmm, depthenc, 0);
+            SendCommand(DEPTH, depth, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_homedepthslider) != depth){
+            depthenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, depth, 0);
+            encoder2.setCount(depthenc);
+            depth = lv_slider_get_value(ui_homedepthslider);
+            SendCommand(DEPTH, depth, OSSM_ID);
+        }
+        char depth_v[7];
+        dtostrf(depth, 6, 0, depth_v);
+        lv_label_set_text(ui_homedepthvalue, depth_v);
+        
+
+        // Encoder3 Stroke
+        if(lv_slider_is_dragged(ui_homestrokeslider) == false){
+          if (encoder3.getCount() != strokeenc){
+            lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
+            if(encoder3.getCount() <= 0){
+              encoder3.setCount(0);
+            } else if (encoder3.getCount() >= Encoder_MAP){
+              encoder3.setCount(Encoder_MAP);
+            } 
+            strokeenc = encoder3.getCount();
+            stroke = fscale(0, Encoder_MAP, 0, maxdepthinmm, strokeenc, 0);
+            SendCommand(STROKE, stroke, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_homestrokeslider) != stroke){
+            strokeenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, stroke, 0);
+            encoder3.setCount(strokeenc);
+            stroke = lv_slider_get_value(ui_homestrokeslider);
+            SendCommand(STROKE, stroke, OSSM_ID);
+        }
+        char stroke_v[7];
+        dtostrf(stroke, 6, 0, stroke_v);
+        lv_label_set_text(ui_homestrokevalue, stroke_v);
+
+        // Encoder4 Senstation
+        if(lv_slider_is_dragged(ui_homesensationslider) == false){
+          if (encoder4.getCount() != sensationenc){
+            lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
+            if(encoder4.getCount() <= (Encoder_MAP/2*-1)){
+              encoder4.setCount((Encoder_MAP/2*-1));
+            } else if (encoder4.getCount() >= (Encoder_MAP/2)){
+              encoder4.setCount((Encoder_MAP/2));
+            } 
+            sensationenc = encoder4.getCount();
+            sensation = fscale((Encoder_MAP/2*-1), (Encoder_MAP/2), -100, 100, sensationenc, 0);
+            SendCommand(SENSATION, sensation, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_homesensationslider) != sensation){
+            sensationenc =  fscale(-100, 100, (Encoder_MAP/2*-1), (Encoder_MAP/2), sensation, 0);
+            encoder4.setCount(sensationenc);
+            sensation = lv_slider_get_value(ui_homesensationslider);
+            SendCommand(SENSATION, sensation, OSSM_ID);
+        }
+
+        if(click2_short_waspressed == true){
+         lv_event_send(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_event_send(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_event_send(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
+        }
+        
+
       }
+      break;
+
+      case ST_UI_MENUE:
+      {
+        if(encoder4.getCount() > encoder4_enc + 2){
+          LogDebug("next");
+          lv_group_focus_next(ui_g_menue);
+          encoder4_enc = encoder4.getCount();
+        } else if(encoder4.getCount() < encoder4_enc -2){
+          lv_group_focus_prev(ui_g_menue);
+          LogDebug("Preview");
+          encoder4_enc = encoder4.getCount();
+        }
+
+        if(click2_short_waspressed == true){
+         lv_event_send(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_event_send(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_event_send(lv_group_get_focused(ui_g_menue), LV_EVENT_CLICKED, NULL);
+        }
+      }
+      break;
+
+      case ST_UI_PATTERN:
+      {
+        if(encoder4.getCount() > encoder4_enc + 2){
+          LogDebug("next");
+          uint32_t t = LV_KEY_DOWN;
+          lv_event_send(ui_PatternS, LV_EVENT_KEY, &t);
+          encoder4_enc = encoder4.getCount();
+        } else if(encoder4.getCount() < encoder4_enc -2){
+          uint32_t t = LV_KEY_UP;
+          lv_event_send(ui_PatternS, LV_EVENT_KEY, &t);
+          LogDebug("Preview");
+          encoder4_enc = encoder4.getCount();
+        }
+         if(click2_short_waspressed == true){
+         lv_event_send(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_event_send(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_event_send(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
+        }
+      }
+      break;
+
+      case ST_UI_Torqe:
+      {
+        // Encoder 1 Torqe Out
+        if(lv_slider_is_dragged(ui_outtroqeslider) == false){
+          if (encoder1.getCount() != torqe_f_enc){
+            lv_slider_set_value(ui_outtroqeslider, torqe_f, LV_ANIM_OFF);
+            if(encoder1.getCount() <= 0){
+              encoder1.setCount(0);
+            } else if (encoder1.getCount() >= Encoder_MAP){
+              encoder1.setCount(Encoder_MAP);
+            } 
+            torqe_f_enc = encoder1.getCount();
+            torqe_f = fscale(0, Encoder_MAP, 50, 200, torqe_f_enc, 0);
+            SendCommand(TORQE_F, torqe_f, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_outtroqeslider) != torqe_f){
+            torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
+            encoder1.setCount(torqe_f_enc);
+            torqe_f = lv_slider_get_value(ui_outtroqeslider);
+            SendCommand(TORQE_F, torqe_f, OSSM_ID);
+        }
+        char torqe_f_v[7];
+        dtostrf((torqe_f*-1), 6, 0, torqe_f_v);
+        lv_label_set_text(ui_outtroqevalue, torqe_f_v);
+
+        // Encoder 4 Torqe IN
+        if(lv_slider_is_dragged(ui_introqeslider) == false){
+          if (encoder4.getCount() != torqe_r_enc){
+            lv_slider_set_value(ui_introqeslider, torqe_r, LV_ANIM_OFF);
+            if(encoder4.getCount() <= 0){
+              encoder4.setCount(0);
+            } else if (encoder4.getCount() >= Encoder_MAP){
+              encoder4.setCount(Encoder_MAP);
+            } 
+            torqe_r_enc = encoder4.getCount();
+            torqe_r = fscale(0, Encoder_MAP, 20, 200, torqe_r_enc, 0);
+            SendCommand(TORQE_R, torqe_r, OSSM_ID);
+          }
+        } else if(lv_slider_get_value(ui_introqeslider) != torqe_r){
+            torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
+            encoder4.setCount(torqe_r_enc);
+            torqe_r = lv_slider_get_value(ui_introqeslider);
+            SendCommand(TORQE_R, torqe_r, OSSM_ID);
+        }
+        char torqe_r_v[7];
+        dtostrf(torqe_r, 6, 0, torqe_r_v);
+        lv_label_set_text(ui_introqevalue, torqe_r_v);
+
+         if(click2_short_waspressed == true){
+         lv_event_send(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_event_send(ui_TorqeButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_event_send(ui_TorqeButtonR, LV_EVENT_CLICKED, NULL);
+        }
+      }
+      break;
+
+      case ST_UI_EJECTSETTINGS:
+      {
+         if(click2_short_waspressed == true){
+         lv_event_send(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_event_send(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_event_send(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
+        }
+      }
+      break;
+
+      case ST_UI_SETTINGS:
+      {
+         if(click2_short_waspressed == true){
+         lv_event_send(ui_SettingsButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_event_send(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_event_send(ui_SettingsButtonR, LV_EVENT_CLICKED, NULL);
+        }
+      }
+      break;    
      }
-    break;
+     mxclick_long_waspressed = false;
+     mxclick_short_waspressed = false;
+     click2_short_waspressed = false;
+     click3_short_waspressed = false;
 
-    case MENUE2:
-     {
-      switch(touchmenue()){
-        case 1:
-        vibrate();
-        LogDebug("Reboot Triggerd");
-        SendCommand(REBOOT, 0, OSSM);
-        ESP.restart();
-        break;
-        case 2:
-      vibrate();
-        break;
-        case 3:
-      vibrate();
-        break;
-        case 4:
-      vibrate();
-        break;
-      }
-
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      }
-      if(M5.BtnC.wasReleased()) {
-      menue_state_machine(MENUE);
-      vibrate();
-      }
-     }
-      break;
-
-      case TORQE:
-      {
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      }  
-      }
-      break;
-      case PATTERN_MENUE:
-      { 
-      
-      switch(touchmenue()){
-        case 1:
-          SendCommand(PATTERN, 0, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 2:
-          SendCommand(PATTERN, 2, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 3:
-          SendCommand(PATTERN, 1, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 4:
-          SendCommand(PATTERN, 3, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-      }
-
-      if(M5.BtnB.wasReleased()) {
-        menue_state_machine(HOME);
-        vibrate();
-      }
-      if(M5.BtnC.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE2);
-        vibrate();
-      }
-      }
-      break;
-      case PATTERN_MENUE2:
-      {
-      switch(touchmenue()){
-        case 1:
-          SendCommand(PATTERN, 5, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 2:
-          SendCommand(PATTERN, 6, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 3:
-          SendCommand(PATTERN, 4, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 4:
-          SendCommand(PATTERN, 8, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-      }
-      if(M5.BtnA.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE);
-        vibrate();
-      }
-      if(M5.BtnB.wasReleased()) {
-        menue_state_machine(HOME);
-        vibrate();
-      }
-      if(M5.BtnC.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE3);
-        vibrate();
-      }
-      }
-      break;
-      case PATTERN_MENUE3:
-      { 
-      switch(touchmenue()){
-        case 1:
-          SendCommand(PATTERN, 7, OSSM);
-          menue_state_machine(HOME);
-          updatepowerbars();
-          vibrate();
-          break;
-        case 2:
-          vibrate();
-          break;
-        case 3:
-          vibrate();
-          break;
-        case 4:
-          vibrate();
-          break;
-      }
-      if(M5.BtnA.wasReleased()) {
-        menue_state_machine(PATTERN_MENUE2);
-        vibrate();
-      }
-      if(M5.BtnB.wasReleased()) {
-        menue_state_machine(HOME);
-        vibrate();
-      }
-      }
-      break;
-      case CUM_MENUE:
-      {
-      if(M5.BtnB.wasReleased()) {
-      menue_state_machine(HOME);
-      vibrate();
-      } 
-      }
-      break;
-      }
-  delay(100);
+  delay(5);
 }
 
 void espNowRemoteTask(void *pvParameters)
@@ -623,13 +824,7 @@ void espNowRemoteTask(void *pvParameters)
   peerInfo.channel = 0;  
   peerInfo.encrypt = false;
   // register first peer  
-  memcpy(peerInfo.peer_addr, OSSM_Address, 6);
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-    return;
-  }
-  // register second peer  
-  memcpy(peerInfo.peer_addr, CUM_Address, 6);
+  memcpy(peerInfo.peer_addr, Broadcast_Address, 6);
   if (esp_now_add_peer(&peerInfo) != ESP_OK){
     Serial.println("Failed to add peer");
     return;
@@ -643,98 +838,7 @@ void espNowRemoteTask(void *pvParameters)
     }
 }
 
-void homescreentask(void *pvParameters)
-{
-for(;;)
- {
-  if(esp_connect == true){
-  M5.Lcd.setTextColor(FrontColor);
-  if(encoder1.getCount() != speedenc){
-    speedenc = encoder1.getCount();
-    speed = fscale(0, Encoder_MAP, 0.5, speedlimit, constrain(speedenc,0,Encoder_MAP), -3);
-    updatepowerbars();
-    SendCommand(SPEED, speed, OSSM);
-  }
-  if(encoder2.getCount() != depthenc){
-    depthenc = encoder2.getCount();
-    depth = map(constrain(depthenc,0,Encoder_MAP),0,Encoder_MAP,0,maxdepthinmm);
-    updatepowerbars();
-    SendCommand(DEPTH, depth, OSSM);
-  }
-  if(encoder3.getCount() != strokeenc){
-    strokeenc = encoder3.getCount();
-    stroke = map(constrain(strokeenc,0,maxdepthinmm),0,maxdepthinmm,0,maxdepthinmm);
-    updatepowerbars();
-    SendCommand(STROKE, stroke, OSSM);
-  }
-
-
-  if(encoder4.getCount() != sensationenc){
-    sensationenc = encoder4.getCount();
-    sensation = map(constrain(sensationenc,0,Encoder_MAP),0,Encoder_MAP,-100,100);
-    updatepowerbars();
-    SendCommand(SENSATION, sensation, OSSM);
-  }
-}
-vTaskDelay(100);
-} 
-}
-
-void menuescreentask(void *pvParameters)
-{
-for(;;)
-{
-
-  if(encoder4.getCount() != menue_enc)
-    {
-    menue_enc = encoder4.getCount();
-    switch(menue_enc){
-      case 1:
-      LogDebug("1");
-      break;
-      case 2:
-      LogDebug("2");
-      break;
-      case 3:
-      LogDebug("3");
-      break;
-      case 4:
-      LogDebug("4");
-      break;
-    }
-    }
-  vTaskDelay(300); 
-}
-}
-
-void torqescreentask(void *pvParameters)
-{
-  for(;;)
-  {
-  M5.Lcd.setTextColor(FrontColor);
-  if(encoder1.getCount() != torqe_r_enc)
-    {
-    torqe_r_enc = encoder1.getCount();
-    torqe_r = map(constrain(torqe_r_enc,0,Encoder_MAP),0,Encoder_MAP,-200,-50);
-    M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S1Pos+progheight-5);
-    M5.Lcd.print(torqe_r);
-    SendCommand(TORQE_R, torqe_r, OSSM);
-    }
-
-  if(encoder4.getCount() != torqe_f_enc)
-    {
-    torqe_f_enc = encoder4.getCount();
-    torqe_f = map(constrain(torqe_f_enc,0,Encoder_MAP),0,Encoder_MAP,200,20);
-    M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S2Pos+progheight-5);
-    M5.Lcd.print(torqe_f);
-    SendCommand(TORQE_F, torqe_f, OSSM);
-    }
-  vTaskDelay(100);
-  }
-}
-
+/*
 void cumscreentask(void *pvParameters)
 {
   for(;;)
@@ -782,546 +886,32 @@ void cumscreentask(void *pvParameters)
   vTaskDelay(100);
   }
 }
-
-void vibrationTask(void *pvParameters)
-{
-for(;;)
-  {
-    vTaskDelay(300); 
-  }
-}
-
-void menueUpdate(int select){
-  M5.Lcd.setCursor(0,displayheight-5);
-  M5.Lcd.setTextPadding(displaywidth);
-  switch(select){
-    case 0:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(10,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_BLANK);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_MENUE)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_MENUE);
-    M5.Lcd.setTextColor(HighlightColor);
-    M5.Lcd.setCursor(displaywidth-110,displayheight-5);
-    M5.Lcd.print(T_CONNECT);
-    break;
-    case 1:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(HighlightColor);
-    M5.Lcd.print(T_START);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_MENUE)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_MENUE);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.print(T_STOP);
-    break;
-    case 2:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_START);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_MENUE)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_MENUE);
-    M5.Lcd.setTextColor(HighlightColor);
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.print(T_STOP);
-    break;
-    case 3:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_CUM);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_HOME);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.fillTriangle(305, 235, 295, 215, 315, 215, FrontColor);
-    M5.Lcd.print(T_MEN2);
-    break;
-    case 4:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_CUM);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_HOME);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.fillTriangle(305, 215, 295, 235, 315, 235, FrontColor);
-    M5.Lcd.print(T_MEN1);
-    break;
-    case 5:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_BLANK);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_HOME);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.print(T_BLANK);
-    break;
-    case 6:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_BLANK);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_HOME);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.fillTriangle(305, 235, 295, 215, 315, 215, FrontColor);
-    M5.Lcd.print(T_MEN2);
-    break;
-    case 7:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.fillTriangle(10, 215, 0, 235, 20, 235, FrontColor);
-    M5.Lcd.print(T_MEN1);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_HOME);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.fillTriangle(305, 235, 295, 215, 315, 215, FrontColor);
-    M5.Lcd.print(T_MEN2);
-    break;
-    case 8:
-    M5.Lcd.setCursor(displaywidth-80,displayheight-5);
-    M5.Lcd.setTextPadding(displaywidth);
-    M5.Lcd.setFont(&FreeSansBold12pt7b);
-    M5.Lcd.setCursor(20,displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.fillTriangle(10, 215, 0, 235, 20, 235, FrontColor);
-    M5.Lcd.print(T_MEN1);
-    M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HOME)*0.5),displayheight-5);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.print(T_HOME);
-    M5.Lcd.setTextColor(FrontColor);
-    M5.Lcd.setCursor(displaywidth-90,displayheight-5);
-    M5.Lcd.print(T_BLANK);
-    break;
-  }
-
-}
-
-void drawdisplay(int display){
-  switch (display){
-    case HOME:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
-      M5.Lcd.print(T_HEADER);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_SPEED);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_DEPTH);
-      int mm = depth;
-      M5.Lcd.setCursor(95,S2Pos+progheight-5);
-      M5.Lcd.print(mm);
-      M5.Lcd.print(T_MM);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_STROKE);
-      mm = stroke;
-      M5.Lcd.setCursor(95,S3Pos+progheight-5);
-      M5.Lcd.print(mm);
-      M5.Lcd.print(T_MM);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_SENSATION);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-    case MENUE:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
-      M5.Lcd.print(T_HEADER);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_SETUP_DEPTH_I);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_SETUP_DEPTH_F);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_SELECT_PATTERN);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_SETUP_TORQE);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-    case MENUE2:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
-      M5.Lcd.print(T_HEADER);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_RESTART);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-    case TORQE:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
-      M5.Lcd.print(T_HEADER);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_OUT_TORQE);
-      M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
-      M5.Lcd.setCursor(200,S1Pos+progheight-5);
-      M5.Lcd.print(torqe_r);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_IN_TORQE);
-      M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
-      M5.Lcd.setCursor(200,S2Pos+progheight-5);
-      M5.Lcd.print(torqe_f);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-    case PATTERN_MENUE:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_Patterns)*0.5),25);
-      M5.Lcd.print(T_Patterns);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_SimpleStroke);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_RoboStroke);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_TeasingPounding);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_HalfnHalf);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-    case PATTERN_MENUE2:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_Patterns)*0.5),25);
-      M5.Lcd.print(T_Patterns);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_StopNGo);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_Insist);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_Deeper);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_StrokeNibbler);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-    case PATTERN_MENUE3:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_Patterns)*0.5),25);
-      M5.Lcd.print(T_Patterns);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_JackHammer);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_BLANK);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-    case CUM_MENUE:
-    {
-      M5.lcd.clearDisplay();
-      M5.Lcd.fillScreen(BgColor);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.setTextSize(1);
-      M5.Lcd.setFont(&FreeSansBold12pt7b);
-      M5.Lcd.setCursor(displaywidth*0.5-(M5.Lcd.textWidth(T_HEADER)*0.5),25);
-      M5.Lcd.print(T_HEADER);
-      M5.Lcd.setTextColor(TextColor);
-      M5.Lcd.fillRect(0,S1Pos-distheight,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S1Pos+progheight-5);
-      M5.Lcd.print(T_CUM_SPEED);
-      M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
-      M5.Lcd.setCursor(200,S1Pos+progheight-5);
-      M5.Lcd.print(cum_speed);
-      M5.Lcd.fillRect(0,S1Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S2Pos+progheight-5);
-      M5.Lcd.print(T_CUM_TIME);
-      M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
-      M5.Lcd.setCursor(200,S2Pos+progheight-5);
-      M5.Lcd.print(cum_time);
-      M5.Lcd.fillRect(0,S2Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S3Pos+progheight-5);
-      M5.Lcd.print(T_CUM_Volume);
-      M5.Lcd.fillRect(0,S3Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-      M5.Lcd.setCursor(5,S4Pos+progheight-5);
-      M5.Lcd.print(T_CUM_Accel);
-      M5.Lcd.fillRect(0,S4Pos+progheight+2,displaywidth,distheight-4, FrontColor);
-    }
-    break;
-  }
-}
-
-void menue_state_machine(int menuestate){
-  switch (menuestate) {
-    case HOME:
-    drawdisplay(HOME);
-    menueUpdate(2);
-    powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, 0);
-    powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, 50);
-    encoder1.setCount(speedenc);
-    encoder2.setCount(depthenc);
-    encoder3.setCount(strokeenc);
-    sensationenc = map(sensation, -100,100, 0, Encoder_MAP);
-    encoder4.setCount(sensationenc);
-    vTaskResume(home_t);
-    vTaskSuspend(torqe_t);
-    vTaskSuspend(cum_t);
-    menuestatus = HOME;
-    break;
-    case MENUE:
-    vTaskSuspend(home_t);
-    vTaskSuspend(torqe_t);
-    vTaskSuspend(cum_t);
-    menuestatus = MENUE;
-    drawdisplay(MENUE);
-    menueUpdate(3);
-    break;
-    case MENUE2:
-    vTaskSuspend(home_t);
-    vTaskSuspend(torqe_t);
-    vTaskSuspend(cum_t);
-    menuestatus = MENUE2;
-    drawdisplay(MENUE2);
-    menueUpdate(4);
-    break;
-    case TORQE:
-    vTaskSuspend(home_t);
-    torqe_f_enc = map(torqe_f, 200, 20, 0, Encoder_MAP);
-    torqe_r_enc = map(torqe_r, -200,-50, 0, Encoder_MAP);
-    encoder1.setCount(torqe_r_enc);
-    encoder4.setCount(torqe_f_enc);
-    vTaskResume(torqe_t);
-    vTaskSuspend(cum_t);
-    menuestatus = TORQE;
-    drawdisplay(TORQE);
-    menueUpdate(5);
-    break;
-    case PATTERN_MENUE:
-    vTaskSuspend(home_t);
-    vTaskSuspend(torqe_t);
-    vTaskSuspend(cum_t);
-    menuestatus = PATTERN_MENUE;
-    drawdisplay(PATTERN_MENUE);
-    menueUpdate(6);
-    break;
-    case PATTERN_MENUE2:
-    vTaskSuspend(home_t);
-    vTaskSuspend(torqe_t);
-    vTaskSuspend(cum_t);
-    menuestatus = PATTERN_MENUE2;
-    drawdisplay(PATTERN_MENUE2);
-    menueUpdate(7);
-    break;
-    case PATTERN_MENUE3:
-    vTaskSuspend(home_t);
-    vTaskSuspend(torqe_t);
-    vTaskSuspend(cum_t);
-    menuestatus = PATTERN_MENUE3;
-    drawdisplay(PATTERN_MENUE3);
-    menueUpdate(8);
-    break;
-    case CUM_MENUE:
-    vTaskSuspend(home_t);
-    encoder1.setCount(cum_s_enc);
-    encoder2.setCount(cum_t_enc);
-    encoder3.setCount(cum_si_enc);
-    encoder4.setCount(cum_a_enc);
-    vTaskResume(cum_t);
-    menuestatus = CUM_MENUE;
-    drawdisplay(CUM_MENUE);
-    menueUpdate(5);
-    break;
-}
-}
-
-void updatepowerbars(){
-  M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-  M5.Lcd.fillRect(85,S1Pos,85,30,BgColor);
-  int mms = speed;
-  M5.Lcd.setCursor(95,S1Pos+progheight-5);
-  M5.Lcd.print(mms);
-  M5.Lcd.print(T_FUCKS_MIN);
-  powerBar(displaywidth*0.5+10,S1Pos,displaywidth*0.5-20,progheight, map(constrain(encoder1.getCount(),0,Encoder_MAP),0,Encoder_MAP,0,100));
-  M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-  M5.Lcd.fillRect(85,S2Pos,85,30,BgColor);
-  int mmd = depth;
-  M5.Lcd.setCursor(95,S2Pos+progheight-5);
-  M5.Lcd.print(mmd);
-  M5.Lcd.print(T_MM);
-  powerBar(displaywidth*0.5+10,S2Pos,displaywidth*0.5-20,progheight, map(depth, 0, maxdepthinmm, 0, 100));
-  M5.Lcd.setFreeFont(&FreeSansBold9pt7b);
-  M5.Lcd.fillRect(85,S3Pos,85,30,BgColor);
-  int mmst = stroke;
-  M5.Lcd.setCursor(95,S3Pos+progheight-5);
-  M5.Lcd.print(mmst);
-  M5.Lcd.print(T_MM);
-  powerBar(displaywidth*0.5+10,S3Pos,displaywidth*0.5-20,progheight, map(stroke, 0, maxdepthinmm, 0, 100));
-  powerBar(displaywidth*0.5+10,S4Pos,displaywidth*0.5-20,progheight, map(sensation,-100,100,0,100));
-}
-
-int64_t touchmenue(){
-      TouchPoint_t coordinate;
-      coordinate = M5.Touch.getPressPoint();
-      int touch = constrain(coordinate.y,0,300);
-
-      if((touch >= 60) && (touch <= 110)){
-        LogDebug("Touch1");
-        return 1;
-      } else if((touch >= 110) && (touch <= 145)){
-        LogDebug("Touch2");
-        return 2;
-      } else if((touch >= 145) && (touch <= 165)){
-        LogDebug("Touch3");
-        return 3;
-      } else if((touch >= 165) && (touch <= 190)){
-        LogDebug("Touch4");
-        return 4;
-      } else {
-        return 0;
-      }
-}
+*/
 
 void vibrate(){
+    if(vibrate_mode == true){
     M5.Axp.SetLDOEnable(3,true);
     vTaskDelay(300);
     M5.Axp.SetLDOEnable(3,false);
+    }
 }
 
-
 void mxclick() {
-  Serial.println("MX click.");
-         switch(onoff){
-           case true:
-           SendCommand(OFF, 0, OSSM);
-           if(menuestatus == HOME){
-             menueUpdate(2);
-           }
-           onoff = false;
-           break;
-           case false:
-           SendCommand(ON, 0, OSSM);
-           if(menuestatus == HOME){
-             menueUpdate(1);
-           }
-           onoff = true;
-           break;
-         }
-} 
-void mxlong(){
-  Serial.println("MX Long click.");
-  menue_state_machine(MENUE);
   vibrate();
+  mxclick_short_waspressed = true;
 } 
+
+void mxlong(){
+  vibrate();
+  mxclick_long_waspressed = true;
+} 
+
 void click2() {
-  Serial.println("Button 2 click.");
+  vibrate();
+  click2_short_waspressed = true;
 } // click1
+
 void click3() {
-  Serial.println("Button 3 click.");
+  vibrate();
+  click3_short_waspressed = true;
 } // click1
