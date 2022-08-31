@@ -204,6 +204,8 @@ static void ui_event_HomeButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
+        _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    } else if(event == LV_EVENT_LONG_PRESSED){
         _ui_screen_change(ui_Menue, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
@@ -778,10 +780,11 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_HomeButtonRText, T_MENUE);
+    lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button);
 
     lv_obj_set_style_text_color(ui_HomeButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_HomeButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_HomeButtonRText, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_SpeedL
 
