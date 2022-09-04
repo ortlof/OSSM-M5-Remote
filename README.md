@@ -8,11 +8,14 @@ A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the OS
 Intially developed for the OSSM Project: 
 https://github.com/KinkyMakers/OSSM-hardware
  
+
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
 Supported in this version of the M5 remote:
+## Supported toys in this version
 
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
+
 | EJECT | https://github.com/ortlof/EJECT-cum-tube-project |
 
 # Build IT Yourself
@@ -48,7 +51,7 @@ Filament - A good quality PLA works well. While there are no threads it is recom
 
 ## Assembly 
 
-Due to a lack of standardisation in LIPO battery polarity it is important to verify which one you have. If the battery is reversed it will result in the CORE M5 Stack failing.  
+Due to a lack of standardisation in LIPO battery polarity it is important to verify how yours is configured. If the battery is reversed it will result in the CORE M5 Stack being damaged.
 
 1. Remove Core M5 MIC/MPU Module from M5 core Bottom, Unscrew the Grey bottom and remove internal battery. 
 2. Glue battery with 3m Tape to Bottom Part.
@@ -81,4 +84,4 @@ Due to a lack of standardisation in LIPO battery polarity it is important to ver
 3. Clone or Download this Repo for the OSSM https://github.com/ortlof/OSSM-Stroke
 4. Flash Code Like Described in this Readme https://github.com/KinkyMakers/OSSM-hardware/blob/master/OSSM%20PlatformIO%20Readme.md
 
-Version 1 PCB users will need to change your version to V1 in the config.h 
+If you are one of the very small number of Version 1 PCB users, you will need to change your version to V1 in the config.h. The current version in GitHub is V2.
