@@ -1,14 +1,14 @@
 # Project REMOTE
 ## The OSSM-M5-Remote
 
-A Remote Control Platform for all ESP Controlled Sex Toys. With a focus on the OSSM and related toys.
+A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the OSSM and related toys.
 
 ![Final Addon](image/remote.png?raw=true "Remote" )
 
 Intially developed for the OSSM Project: 
 https://github.com/KinkyMakers/OSSM-hardware
  
-To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE Be sure to say hello in the #m5-remote channel. 
+To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
 Supported in this version of the M5 remote:
 
@@ -34,7 +34,7 @@ Supported in this version of the M5 remote:
 ## BOM
 BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
-PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder
+PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder 
 
 ## 3D Prints Needed:
 
