@@ -1,16 +1,16 @@
 # Project REMOTE
 ## The OSSM-M5-Remote
 
-Remote Control Platform for all ESP Controlled Sex Toys. 
+A Remote Control Platform for all ESP Controlled Sex Toys. With a focus on the OSSM and related toys.
 
 ![Final Addon](image/remote.png?raw=true "Remote" )
 
-Develop for the OSSM Project: 
+Intially developed for the OSSM Project: 
 https://github.com/KinkyMakers/OSSM-hardware
  
-Develop and Design on KinkyMakers Discord: https://discord.gg/MmpT9xE
+To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE Be sure to say hello in the #m5-remote channel. 
 
-Supports in this Version:
+Supported in this version of the M5 remote:
 
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
 | EJECT | https://github.com/ortlof/EJECT-cum-tube-project |
@@ -29,12 +29,12 @@ Supports in this Version:
 | 4x | Encoder Knob Bought or 3D Printed | https://de.aliexpress.com/item/1005001394286414.html | 5 € |
 | 1x | M5 Remote PCB | KinyMaker Discord M5-Remote Channel or https://www.pcbway.com/project/shareproject/M5Stack_Core2_Remote_Plattform_2cb5bac0.html | 15 € |
 
-!! Only M5 Stack CORE2 works with this PCB !!
+!! IMPORTANT!: Only the M5 Stack CORE2 works with this PCB !!
 
 ## BOM
 BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
-PCB Files in Folder
+PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder
 
 ## 3D Prints Needed:
 
@@ -44,7 +44,11 @@ PCB Files in Folder
 | 1x | TOP-*-Keycap-Standoff.stl | Top Depends on your Keycap Cherry or DAS (DSA is wider) | 
 | 4x | M5_Remote_Knob_Customizable.scad | If you go for the 3d Printed knobs |
 
+Filament - A good quality PLA works well. While there are no threads it is recommended that your printer is well calibrated.  
+
 ## Assembly 
+
+Due to a lack of standardisation in LIPO battery polarity it is important to verify which one you have. If the battery is reversed it will result in the CORE M5 Stack failing.  
 
 1. Remove Core M5 MIC/MPU Module from M5 core Bottom, Unscrew the Grey bottom and remove internal battery. 
 2. Glue battery with 3m Tape to Bottom Part.
@@ -67,7 +71,7 @@ PCB Files in Folder
 
 ![4](image/full-remote.jpg?raw=true "4" )
 
-10. Put on Mx Cap and put on Encoder Knobs. 
+10. Install the Mx Cap and Encoder Knobs. 
 
 
 ## Flash Code:
@@ -77,17 +81,4 @@ PCB Files in Folder
 3. Clone or Download this Repo for the OSSM https://github.com/ortlof/OSSM-Stroke
 4. Flash Code Like Described in this Readme https://github.com/KinkyMakers/OSSM-hardware/blob/master/OSSM%20PlatformIO%20Readme.md
 
-OSSM Remote and OSSM works out of the box right now with 0xFF Broadcast Adresses
-Next Versions get OSSM and Remote IDs in Remote to setup. 
-~~For safety or when you wan't to use more than one OSSM Remote and OSSM in one Room. ~~
-~~You need to set Your MAC adresses acordingly:~~
-
-~~After building both codes they display MAC's in Serial Console.~~
-~~Find Line and Change to your OSSM MAC in OSSM code you have to Set the mac of your Remote. ~~
-
-~~MAC in Serial Looks like: 34:86:5D:57:F5:84~~
-
-~~Change to this:~~
-
-~~"#define OSSM 1"~~
-~~"uint8_t OSSM_Address[] = {0x34, 0x86, 0x5d, 0x57, 0xf5, 0x84};"~~
+Version 1 PCB users will need to change your version to V1 in the config.h 
