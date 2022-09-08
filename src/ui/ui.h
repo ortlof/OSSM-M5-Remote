@@ -137,6 +137,7 @@ extern lv_obj_t * ui_darkmode;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
 extern lv_group_t * ui_g_menue;
+extern lv_group_t * ui_g_settings;
 
 
 void screenmachine(lv_event_t * e);

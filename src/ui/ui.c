@@ -130,6 +130,7 @@ lv_obj_t * ui_darkmode;
 lv_obj_t * ui_vibrate;
 lv_obj_t * ui_lefty;
 lv_group_t * ui_g_menue;
+lv_group_t * ui_g_settings;
 
 
 ///////////////////// TEST LVGL SETTINGS ////////////////////
@@ -2469,6 +2470,7 @@ void ui_Settings_screen_init(void)
     lv_obj_add_flag(ui_darkmode, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
     lv_obj_set_style_text_font(ui_darkmode, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_darkmode, lv_color_hex(0x5b0353), LV_PART_MAIN | LV_STATE_FOCUSED);
 
     //lv_obj_set_style_border_color(ui_darkmode, lv_color_hex(0x83247B), LV_PART_INDICATOR | LV_STATE_DEFAULT);
     //lv_obj_set_style_border_opa(ui_darkmode, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
@@ -2496,7 +2498,7 @@ void ui_Settings_screen_init(void)
     // ui_lefty
 
     ui_lefty = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(ui_lefty, T_BLANK);
+    lv_checkbox_set_text(ui_lefty, T_TOUCHSETTING);
 
     lv_obj_set_width(ui_lefty, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_lefty, LV_SIZE_CONTENT);

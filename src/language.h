@@ -34,6 +34,7 @@
 #define T_HIGH              "High"
 #define T_DARKM             "Dark Mode"
 #define T_VIBRATE           "Vibrate"
+#define T_TOUCHSETTING      "Touch on Home"
 
 
 #define T_Patterns          "Pattern:"

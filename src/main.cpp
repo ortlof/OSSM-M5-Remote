@@ -72,12 +72,13 @@ int menuestatus = CONNECT;
 #define EJECT 0
 #define DARKMODE 1
 #define VIBRATE 2
-#define LEFTY 3
+#define LEFTY 6
 
 bool eject_status = false;
 bool dark_mode = false;
 bool vibrate_mode = true;
-bool lefty_mode = false;
+bool touch_home = false;
+bool touch_disabled = false;
 
 // Command States
 #define CONN 0
@@ -114,6 +115,7 @@ bool rstate = false;
 int pattern = 2;
 char patternstr[20];
 bool onoff = false;
+
 
 long speedenc = 0;
 long depthenc = 0;
@@ -266,6 +268,7 @@ void init_disp_driver() {
 
 void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 {
+  if(touch_disabled == false){
   TouchPoint_t pos = M5.Touch.getPressPoint();
   bool touched = ( pos.x == -1 ) ? false : true;  
 
@@ -288,6 +291,7 @@ void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
     data->state = LV_INDEV_STATE_PRESSED; 
     data->point.x = pos.x;
     data->point.y = pos.y;
+  }
   } 
 }
 }
@@ -388,7 +392,7 @@ void savesettings(lv_event_t * e)
 		EEPROM.writeBool(LEFTY,false);
 	}
   EEPROM.commit();
-  delay(20);
+  delay(100);
   ESP.restart();
 }
 
@@ -505,7 +509,7 @@ void setup(){
   eject_status = EEPROM.readBool(EJECT);
   dark_mode = EEPROM.readBool(DARKMODE);
   vibrate_mode = EEPROM.readBool(VIBRATE);
-  lefty_mode = EEPROM.readBool(LEFTY);
+  touch_home = EEPROM.readBool(LEFTY);
 
   ui_init();
   
@@ -520,7 +524,7 @@ void setup(){
   if(vibrate_mode == true){
   lv_obj_add_state(ui_vibrate, LV_STATE_CHECKED);
   }
-  if(lefty_mode == true){
+  if(touch_home == true){
   lv_obj_add_state(ui_lefty, LV_STATE_CHECKED);
   }
   lv_roller_set_selected(ui_PatternS,2,LV_ANIM_OFF);
@@ -568,6 +572,9 @@ void loop()
 
       case ST_UI_HOME:
       {
+        if(touch_home == true){
+          touch_disabled = true;
+        }
         // Encoder 1 Speed 
         if(lv_slider_is_dragged(ui_homespeedslider) == false){
           if (encoder1.getCount() != speedenc){
@@ -673,6 +680,9 @@ void loop()
 
       case ST_UI_MENUE:
       {
+        if(touch_home == true){
+          touch_disabled = true;
+        }
         if(encoder4.getCount() > encoder4_enc + 2){
           LogDebug("next");
           lv_group_focus_next(ui_g_menue);
@@ -695,6 +705,9 @@ void loop()
 
       case ST_UI_PATTERN:
       {
+        if(touch_home == true){
+          touch_disabled = true;
+        }
         if(encoder4.getCount() > encoder4_enc + 2){
           LogDebug("next");
           uint32_t t = LV_KEY_DOWN;
@@ -718,6 +731,9 @@ void loop()
 
       case ST_UI_Torqe:
       {
+        if(touch_home == true){
+          touch_disabled = true;
+        }
         // Encoder 1 Torqe Out
         if(lv_slider_is_dragged(ui_outtroqeslider) == false){
           if (encoder1.getCount() != torqe_f_enc){
@@ -776,27 +792,43 @@ void loop()
 
       case ST_UI_EJECTSETTINGS:
       {
+        if(touch_home == true){
+          touch_disabled = true;
+        }
+        
          if(click2_short_waspressed == true){
          lv_event_send(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          lv_event_send(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
+         
         }
       }
       break;
 
       case ST_UI_SETTINGS:
       {
-         if(click2_short_waspressed == true){
-         lv_event_send(ui_SettingsButtonL, LV_EVENT_CLICKED, NULL);
+        touch_disabled = false;
+        if(encoder4.getCount() > encoder4_enc + 2){
+          LogDebug("next");
+          lv_group_focus_next(ui_g_settings);
+          encoder4_enc = encoder4.getCount();
+        } else if(encoder4.getCount() < encoder4_enc -2){
+          lv_group_focus_prev(ui_g_settings);
+          LogDebug("Preview");
+          encoder4_enc = encoder4.getCount();
+        }
+
+        if(click2_short_waspressed == true){
+         lv_event_send(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
+         lv_event_send(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(ui_SettingsButtonR, LV_EVENT_CLICKED, NULL);
+         lv_event_send(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
-      break;    
+      break;
+
      }
      mxclick_long_waspressed = false;
      mxclick_short_waspressed = false;
