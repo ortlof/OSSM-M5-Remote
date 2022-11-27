@@ -131,6 +131,7 @@ long encoder4_enc = 0;
 
 extern float maxdepthinmm = 180.0;
 extern float speedlimit = 1200;
+int speedscale = -5;
 
 float speed = 0.0;
 float depth = 0.0;
@@ -403,7 +404,7 @@ void screenmachine(lv_event_t * e)
   } else if (lv_scr_act() == ui_Home){
     st_screens = ST_UI_HOME;
     speed = lv_slider_get_value(ui_homespeedslider);
-    speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
+    speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, speedscale);
     encoder1.setCount(speedenc); 
 
     depth = lv_slider_get_value(ui_homedepthslider);       
@@ -585,11 +586,11 @@ void loop()
               encoder1.setCount(Encoder_MAP);
             } 
             speedenc = encoder1.getCount();
-            speed = fscale(0, Encoder_MAP, 0, speedlimit, speedenc, 0);
+            speed = fscale(0, Encoder_MAP, 0, speedlimit, speedenc, speedscale);
             SendCommand(SPEED, speed, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homespeedslider) != speed){
-            speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
+            speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, speedscale);
             encoder1.setCount(speedenc);
             speed = lv_slider_get_value(ui_homespeedslider);
             SendCommand(SPEED, speed, OSSM_ID);
