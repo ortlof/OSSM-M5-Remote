@@ -1,5 +1,6 @@
 #pragma GCC optimize ("Ofast")
 #include <M5Core2.h>
+#include <AXP192.h>
 #include <ESP32Encoder.h>
 #include <esp_now.h>
 #include <WiFi.h>
@@ -479,6 +480,8 @@ void setupdepthF(lv_event_t * e){
 void setup(){
   M5.begin(true, false, true, true); //Init M5Core2.
   EEPROM.begin(EEPROM_SIZE);
+
+  M5.Axp.SetCHGCurrent(AXP192::BATTERY_CHARGE_CURRENT);
   M5.Axp.SetLcdVoltage(3000);
   LogDebug("\n Starting");      // Start LogDebug 
   
