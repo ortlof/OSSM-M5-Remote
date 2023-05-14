@@ -1,5 +1,5 @@
-# Project REMOTE
-## The OSSM-M5-Remote
+# Project OSSM M5 REMOTE
+## Overview of the OSSM-M5-Remote
 
 A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and related toys.
 
@@ -23,13 +23,16 @@ Supported in this version of the M5 remote:
 # Build the OSSM M5 Remote Yourself
 
 ## Bill Of Materials for sourcing Electrical Components
+
+**!! IMPORTANT!:** Only the M5 Stack CORE2 works with the OSSM M5 Remote PCB !!
+
 BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
 PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to make one yourself or use a different manufacturer other than PCBWay.
 
 ## Non-Electrical Parts Needed:
 
-**!! IMPORTANT!:** Only the M5 Stack CORE2 works with the OSSM M5 Remote PCB !!
+
 
 | Quantity | Part | Sourcing EU | Price € |
 |----------|------|-------------|---------|
@@ -39,6 +42,8 @@ PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to 
 | 1x | 3,7v 2000mAh Lipo Batterie Size 34,5 mm x 10,6 mm x 56 mm | https://www.amazon.de/EEMB-103454-2AhLithium-Schutzplatine-Isolationsbeschichtung/dp/B08214DJLJ/ | 14,89 € |
 | 4x | Encoder Knob Bought or 3D Printed | https://de.aliexpress.com/item/1005001394286414.html | 5 € |
 | 1x | OSSM M5 Remote PCB | KinyMaker Discord #M5-Remote Channel or https://www.pcbway.com/project/shareproject/M5Stack_Core2_Remote_Plattform_2cb5bac0.html | 15 € |
+
+--------------------------------------------
 
 | Quantity | Part | Sourcing US | Price $ |
 |----------|------|-------------|---------|
@@ -61,3 +66,12 @@ Filament - A good quality PLA works well. While there are no threads it is recom
 
 __Note:__
 If you are one of the very small number of Version 1 PCB users, you will need to change your version to V1 in the config.h. The current version in GitHub is V2.
+
+## Operation, or...how do I use it?
+
+1. Power on the OSSM and let it home.
+2. Power on the OSSM M5 Remote.
+3. Press the left encoder to select 'Connect'
+4. It will connect to the OSSM and it will perform another home operation.
+5. You can verify it is connected by looking in the top left corner, it should say 'connected'.
+6. You can now begin use. You'll need to set the speed, depth and stroke to more than 0 and press the middle key to start. Start the speed out slow. 
