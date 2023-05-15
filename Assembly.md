@@ -112,7 +112,8 @@ A good quality PLA works well. While there are no threads it is recommended that
 
 1. Visit the [M5 website to download and install the drivers](https://docs.m5stack.com/en/core/core2) for the Core2 on your machine.
 
-2. Clone or download this repository. If you download it as a zip, extract the files.
+2. Clone or download this repository. If you download it as a zip, extract the files.  
+**Note:** If you are one of the very small number of Version 1 PCB users, you will need to change your version to V1 in the config.h. The current version in this repository is V2.
 
 3. Download Visual Studio Code and set up [PlatformIO](https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation)  or [if you would prefer to watch a video](https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation) - Thanks KinkyMakers Disord community admin Ka D'argo for the video!
 
