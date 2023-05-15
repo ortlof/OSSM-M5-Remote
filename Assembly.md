@@ -16,13 +16,22 @@
 
 ## Solder the components
 
-1. If you purchased a stencil from PCBWay/ Your chosen PCB Manufacturer, align it over the PCB and tape it in place. Add a blob of low temperature solder paste to the stencil and scrape it across the holes with a credit card or similar. When you lift the stencil away the PCB should now have solder paste on it in the correct places.
+1. If you purchased a stencil from PCBWay/ Your chosen PCB Manufacturer, align it over the PCB and tape it in place. Add a blob of low temperature solder paste to the stencil and scrape it across the holes with a credit card or similar. When you lift the stencil away the PCB should now have solder paste on it in the correct places. Example photos below are from PCBWay and are not of the OSSM M5 Remote PCB
+![solderPaste](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/7bfadb82-3385-47ea-94f3-8652fe080af8)
+![solderPaste2](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/62b96751-cfc3-4502-a370-034971e312ae)
+![solderpaste3](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/51d70cb2-353b-47d7-a89a-ca4f13daa100)
 
-If you did not purchase a template then you will need to very carefully coat the solder pads of the PCB with solder paste. It doesn't need a ton.
+
+If you did not purchase a stencil then you will need to very carefully coat the solder pads of the PCB with solder paste. It doesn't need a ton.
+
+![without_stencil](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/6e634335-d5ee-4417-ba8e-f26e55206448)
+Photo Credit Xue Ming. The amount of solder paste in the above photo is a little excessive.
 
 2. Carefully place the 11 10k ohm resistors (Bourns CR1206-JW-103ELF) on the solder paste using tweezers. The polarity doesn't matter. Apply heat using a heat gun or reflow oven. The solder paste container will state what temperature to use.
 
-3. Next, place the button encoders (Bourns PEC12R-4220F-S0024) at U1 and U4. Add flux to the pins and pad and solder the button encoders in place.
+![Resistors](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/87db8ef8-29a1-498f-b41d-2c0ce7b44b00)
+
+3. Next, place the button encoders (Bourns PEC12R-4220F-S0024) at U1 and U4. Add flux to the pins and pad and solder the button encoders in place with a soldering iron.
 
 4. Repeat the same for U2 and U3, adding flux and soldering the regular encoders (Bourns PEC12R-4220F-N0024)
 
@@ -30,9 +39,15 @@ If you did not purchase a template then you will need to very carefully coat the
 
 6. Next, the headers. Insert the headers from the front of the PCB (Amphenol Communications Solution 10129381-916001BLF), add a generous amount of flux to the back side and solder each pin.
 
+![PCB-Soldered](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/6c788856-cce5-42a2-8c96-6fc6ae87ce2c)
+
 7. Finally we will solder the battery connector (JST S2B-PH-K-S(LF)(SN)) on the back side of the PCB. The positive pin is the pin closest to the bottom edge of the PCB, the negative pin is the pin the closest to the top edge of the PCB.
 
+![BatteryConnectorSoldered](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/6c1c1cd7-7d8b-4631-922d-3177ff94a039)
+
 8. Again pay special attention to the polarity of the Lithum battery you have, checking to see if the negative terminal of the battery connector will align with the negative pin of the connector on the PCB. Remove the wires from the battery terminal and reverse them if you need to (I had to, for example).
+
+![FlippingWires](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/232e0879-97b6-4940-85c0-7890638a2a90)
 
 ## 3D printed parts
 
@@ -42,9 +57,9 @@ A good quality PLA works well. While there are no threads it is recommended that
 
 * Be sure to choose the correct back to print based on the battery that you source 
 
-    USA- Adafruit 485-2011 / or [Alternate](https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ/) uses 'Bottom_Adafruit_Lipo.stl' OR you can use 'Bottom-Magnets.stl' if you want to add 6 x 3mm magnets.
+    USA - Adafruit 485-2011 / or [Alternate](https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ/) uses 'Bottom_Adafruit_Lipo.stl' OR you can use 'Bottom-Magnets.stl' if you want to add 6 x 3mm magnets.
 
-    Other countries [RS Pro 1449405](https://uk.rs-online.com/web/p/speciality-size-rechargeable-batteries/1449405) uses 'Bottom.stl', or if you want to use magnets in the base you can use 'Bottom-Magnets.stl' that will accept 6 x 3mm magnets.
+    Other countries - [RS Pro 1449405](https://uk.rs-online.com/web/p/speciality-size-rechargeable-batteries/1449405) uses 'Bottom.stl', or if you want to use magnets in the base you can use 'Bottom-Magnets.stl' that will accept 6 x 3mm magnets.
 
 * You have options for the top depending on the keycap type you choose (cherry vs DSA). 
 
