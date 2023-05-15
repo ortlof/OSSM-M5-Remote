@@ -30,9 +30,7 @@ BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
 PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to make one yourself or use a different manufacturer other than PCBWay.
 
-## Non-Electrical Parts Needed:
-
-
+## Additional parts needed that are not found on Octopart:  
 
 | Quantity | Part | Sourcing EU | Price € |
 |----------|------|-------------|---------|
@@ -66,6 +64,8 @@ Filament - A good quality PLA works well. While there are no threads it is recom
 
 __Note:__
 If you are one of the very small number of Version 1 PCB users, you will need to change your version to V1 in the config.h. The current version in GitHub is V2.
+
+# [Assembly instructions](Assembly.md)
 
 ## Operation, or...how do I use it?
 
