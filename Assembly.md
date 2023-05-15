@@ -16,18 +16,24 @@
 
 ## Solder the components
 
-1. If you purchased a stencil from PCBWay/ Your chosen PCB Manufacturer, align it over the PCB and tape it in place. Add a blob of low temperature solder paste to the stencil and scrape it across the holes with a credit card or similar. When you lift the stencil away the PCB should now have solder paste on it in the correct places. Example photos below are from PCBWay and are not of the OSSM M5 Remote PCB
+1. If you purchased a stencil from PCBWay/ Your chosen PCB Manufacturer, align it over the PCB and tape it in place. Add a blob of low temperature solder paste to the stencil and scrape it across the holes with a credit card or similar. When you lift the stencil away the PCB should now have solder paste on it in the correct places. Example photos below are from PCBWay and are not of the OSSM M5 Remote PCB  
+  
+  
 ![solderPaste](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/7bfadb82-3385-47ea-94f3-8652fe080af8)
 ![solderPaste2](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/62b96751-cfc3-4502-a370-034971e312ae)
 ![solderpaste3](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/51d70cb2-353b-47d7-a89a-ca4f13daa100)
-
+  
+    
+    
 
 If you did not purchase a stencil then you will need to very carefully coat the solder pads of the PCB with solder paste. It doesn't need a ton.
 
-![without_stencil](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/6e634335-d5ee-4417-ba8e-f26e55206448)
+![without_stencil](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/6e634335-d5ee-4417-ba8e-f26e55206448)  
+
 Photo Credit Xue Ming. The amount of solder paste in the above photo is a little excessive.
 
-2. Carefully place the 11 10k ohm resistors (Bourns CR1206-JW-103ELF) on the solder paste using tweezers. The polarity doesn't matter. Apply heat using a heat gun or reflow oven. The solder paste container will state what temperature to use.
+2. Carefully place the 11 10k ohm resistors (Bourns CR1206-JW-103ELF) on the solder paste using tweezers. The polarity doesn't matter. Apply heat using a heat gun or reflow oven. The solder paste container will state what temperature to use.  
+
 
 ![Resistors](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/87db8ef8-29a1-498f-b41d-2c0ce7b44b00)
 
@@ -37,11 +43,13 @@ Photo Credit Xue Ming. The amount of solder paste in the above photo is a little
 
 5. The (Cherry MX1A-F1NN /  switch is soldered to the center position in the white square.
 
-6. Next, the headers. Insert the headers from the front of the PCB (Amphenol Communications Solution 10129381-916001BLF), add a generous amount of flux to the back side and solder each pin.
+6. Next, the headers. Insert the headers from the front of the PCB (Amphenol Communications Solution 10129381-916001BLF), add a generous amount of flux to the back side and solder each pin.  
+
 
 ![PCB-Soldered](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/6c788856-cce5-42a2-8c96-6fc6ae87ce2c)
 
-7. Finally we will solder the battery connector (JST S2B-PH-K-S(LF)(SN)) on the back side of the PCB. The positive pin is the pin closest to the bottom edge of the PCB, the negative pin is the pin the closest to the top edge of the PCB.
+7. Finally we will solder the battery connector (JST S2B-PH-K-S(LF)(SN)) on the back side of the PCB. The positive pin is the pin closest to the bottom edge of the PCB, the negative pin is the pin the closest to the top edge of the PCB.  
+
 
 ![BatteryConnectorSoldered](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/6c1c1cd7-7d8b-4631-922d-3177ff94a039)
 
@@ -81,25 +89,24 @@ A good quality PLA works well. While there are no threads it is recommended that
 
 ![1](image/bottom+battery.jpg?raw=true "1" )
 
-3. Connect the M5 Core2 MIC/MPU Module to Bottom Connector on PCB.
-
-5. Connect Battery to PCB connector on the back side of the PCB.
+3. Connect Battery to PCB connector on the back side of the PCB.
 
 ![2](image/bottom+pcb.png?raw=true "2" )
 
-6. Insert the PCB into Bottom case. 
+4. Insert the PCB into Bottom case. 
+![AffixBattery](https://github.com/NightmareSyndrome/OSSM-M5-Remote/assets/131713378/392cc5ae-f787-404a-b128-40521d7e20d7)
 
-7. Connect M5 Core2 to the headers on the PCB and fasten with two 25mm M3 Bolts to Case.
+5. Connect the M5 Core2 to the headers on the PCB and fasten with two 25mm M3 Bolts to Case.
 
 ![3](image/bottom+m5.jpg?raw=true "3" )
 
-8. Put top on Remote and fasten with four M3 20mm Bolts to the Case.
+6. Put top on Remote and fasten with four M3 20mm Bolts to the Case.
 
 ![4](image/full-remote.jpg?raw=true "4" )
 
-9. Install the Mx Cap and Encoder Knobs.
+7. Install the Mx Cap and Encoder Knobs.
 
-10. Charge the battery fully.
+8. Charge the battery fully.
 
 ## Upload Software
 
@@ -119,10 +126,10 @@ If you are one of the very small number of Version 1 PCB users, you will need to
 
 5. Click the upload button at the bottom left of the screen. The program will build then automatically upload to the M5 Core2. Once the software has succesfully uploaded you may disconnect the Core2 from your computer.
 
-5. Next, Clone or download the M5 fork of the OSSM Stroke Engine from [here](https://github.com/ortlof/OSSM-Stroke) using the same method as mentioned in Step 2.
+6. Next, Clone or download the M5 fork of the OSSM Stroke Engine from [here](https://github.com/ortlof/OSSM-Stroke) using the same method as mentioned in Step 2.
 
-6. Open the OSSM Stroke repository from Step 5 in VS Code, again by clicking "File" > "Open Folder" and selecting the folder.
+7. Open the OSSM Stroke repository from Step 5 in VS Code, again by clicking "File" > "Open Folder" and selecting the folder.
 
-7. Now connect the OSSM board to your computer using a USB cable. You can look for it in DeviceManager the same way as you did in step 4. [You can also reference this link for help](https://github.com/KinkyMakers/OSSM-hardware/blob/master/OSSM%20PlatformIO%20Readme.md)
+8. Now connect the OSSM board to your computer using a USB cable. You can look for it in DeviceManager the same way as you did in step 4. [You can also reference this link for help](https://github.com/KinkyMakers/OSSM-hardware/blob/master/OSSM%20PlatformIO%20Readme.md)
 
-8. Click upload.
+9. Click upload.
