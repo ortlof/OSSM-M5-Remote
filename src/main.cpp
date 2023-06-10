@@ -131,8 +131,8 @@ long cum_a_enc = 0;
 long encoder4_enc = 0;
 
 extern float maxdepthinmm = 180.0;
-extern float speedlimit = 1200;
-int speedscale = -5;
+extern float speedlimit = 600;
+int speedscale = 0;
 
 float speed = 0.0;
 float depth = 0.0;
@@ -190,6 +190,7 @@ typedef struct struct_message {
 
 bool esp_connect = false;
 bool m5_first_connect = false;
+bool M5_autoconnect_fix = true;
 
 struct_message outgoingcontrol;
 struct_message incomingcontrol;
@@ -313,7 +314,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
 
-  if(incomingcontrol.esp_target == M5_ID && incomingcontrol.esp_connected == true && m5_first_connect == false){
+  if(incomingcontrol.esp_target == M5_ID && incomingcontrol.esp_connected == true && m5_first_connect == false && M5_autoconnect_fix == false){
     speedlimit = incomingcontrol.esp_speed;
     maxdepthinmm = incomingcontrol.esp_depth;
     pattern = incomingcontrol.esp_pattern;
@@ -367,6 +368,7 @@ void connectbutton(lv_event_t * e)
     outgoingcontrol.esp_command = HEARTBEAT;
     outgoingcontrol.esp_heartbeat = true;
     outgoingcontrol.esp_target = OSSM_ID;
+    M5_autoconnect_fix = false;
     esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     }
 }
@@ -493,7 +495,7 @@ void setup(){
                             5,                  /* priority of the task */
                             &eRemote_t,         /* Task handle to keep track of created task */
                             0);                 /* pin task to core 0 */
-  delay(100);
+  delay(200);
 
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
