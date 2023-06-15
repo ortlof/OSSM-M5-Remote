@@ -7,7 +7,7 @@ uint8_t Broadcast_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 //uint8_t OSSM_Address[] = {0x40, 0x91, 0x51, 0xBB, 0xCC, 0x88};
 #define CUM 2
-uint8_t CUM_Address[] ={0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+uint8_t CUM_Address[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 
 #define OSSM_ID  1 //OSSM_ID Default can be changed with M5 Remote in the Future will be Saved in EPROOM
@@ -55,7 +55,7 @@ OneButton Button2(36, false); //Encoder Left
 OneButton Button3(34, false, true); // Encoder Right
 #endif
 
-#define Encoder_MAP 48
+#define Encoder_MAP 144
 
 #define LV_HOR_RES_MAX 320
 #define LV_VER_RES_MAX 240
