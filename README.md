@@ -11,6 +11,9 @@ https://github.com/KinkyMakers/OSSM-hardware
 
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
+Works not with Official OSSM Firmware Right now.
+This Branch is needed: https://github.com/ortlof/OSSM-Stroke
+
 Supported in this version of the M5 remote:
 ## Supported sex toys in this version
 
