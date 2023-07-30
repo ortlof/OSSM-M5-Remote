@@ -188,17 +188,15 @@ typedef struct struct_message {
   int esp_target;
 } struct_message;
 
-bool esp_connect = false;
-bool m5_first_connect = false;
-bool M5_autoconnect_fix = true;
+bool Ossm_paired = false;
 
 struct_message outgoingcontrol;
 struct_message incomingcontrol;
 
 esp_now_peer_info_t peerInfo;
+uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast to all ESP32s, upon connection gets updated to the actual address
 
-unsigned long Heartbeat_Time = 0;
-const long Heartbeat_Interval = 10000;
+#define HEARTBEAT_INTERVAL 5000/portTICK_PERIOD_MS	// 5 seconds
 
 // Bool
 
@@ -314,15 +312,39 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
 
-  if(incomingcontrol.esp_target == M5_ID && incomingcontrol.esp_connected == true && m5_first_connect == false && M5_autoconnect_fix == false){
+  if(incomingcontrol.esp_target == M5_ID && Ossm_paired == false){
+
+    // Remove the existing peer (0xFF:0xFF:0xFF:0xFF:0xFF:0xFF)
+    esp_err_t result = esp_now_del_peer(peerInfo.peer_addr);
+
+    if (result == ESP_OK) {
+
+      memcpy(OSSM_Address, mac, 6); //get the mac address of the sender
+      
+      // Add the new peer
+      memcpy(peerInfo.peer_addr, OSSM_Address, 6);
+      if (esp_now_add_peer(&peerInfo) == ESP_OK) {
+        LogDebugFormatted("New peer added successfully, OSSM addresss : %02X:%02X:%02X:%02X:%02X:%02X\n", OSSM_Address[0], OSSM_Address[1], OSSM_Address[2], OSSM_Address[3], OSSM_Address[4], OSSM_Address[5]);
+        Ossm_paired = true;
+      }
+      else {
+        LogDebug("Failed to add new peer");
+      }
+    }
+    else {
+      LogDebug("Failed to remove peer");
+    }
+
     speedlimit = incomingcontrol.esp_speed;
     maxdepthinmm = incomingcontrol.esp_depth;
     pattern = incomingcontrol.esp_pattern;
     outgoingcontrol.esp_target = OSSM_ID;
-    esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    
+    result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     LogDebug(result);
+    
     if (result == ESP_OK) {
-      m5_first_connect = true;
+      Ossm_paired = true;
       lv_label_set_text(ui_connect, "Connected");
       lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
@@ -346,30 +368,33 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 //Sends Commands and Value to Remote device returns ture or false if sended
 bool SendCommand(int Command, float Value, int Target){
-      if(m5_first_connect == true){
-      outgoingcontrol.esp_connected = true;
-      outgoingcontrol.esp_command = Command;
-      outgoingcontrol.esp_value = Value;
-      outgoingcontrol.esp_target = Target;
-      esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      if (result == ESP_OK) {
+  
+  if(Ossm_paired == true){
+
+    outgoingcontrol.esp_connected = true;
+    outgoingcontrol.esp_command = Command;
+    outgoingcontrol.esp_value = Value;
+    outgoingcontrol.esp_target = Target;
+    esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+  
+    if (result == ESP_OK) {
       return true;
-      } else {
+    } 
+    else {
       delay(20);
-      esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       return false;
-      }
-      }
+    }
+  }
 }
 
 void connectbutton(lv_event_t * e)
 {
-    if(m5_first_connect == false){
-    outgoingcontrol.esp_command = HEARTBEAT;
-    outgoingcontrol.esp_heartbeat = true;
-    outgoingcontrol.esp_target = OSSM_ID;
-    M5_autoconnect_fix = false;
-    esp_err_t result = esp_now_send(Broadcast_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    if(!Ossm_paired){
+      outgoingcontrol.esp_command = HEARTBEAT;
+      outgoingcontrol.esp_heartbeat = true;
+      outgoingcontrol.esp_target = OSSM_ID;
+      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     }
 }
 
@@ -486,7 +511,28 @@ void setup(){
   M5.Axp.SetCHGCurrent(AXP192::BATTERY_CHARGE_CURRENT);
   M5.Axp.SetLcdVoltage(3000);
   LogDebug("\n Starting");      // Start LogDebug 
-  
+
+  WiFi.mode(WIFI_STA);
+  LogDebug(WiFi.macAddress());
+
+  // Init ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error initializing ESP-NOW");
+  }
+  // Once ESPNow is successfully Init, we will register for Send CB to
+  // get the status of Trasnmitted packet
+  esp_now_register_send_cb(OnDataSent);
+
+  // register peer
+  peerInfo.channel = 0;  
+  peerInfo.encrypt = false;
+  // register first peer  
+  memcpy(peerInfo.peer_addr, OSSM_Address, 6);
+  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+    Serial.println("Failed to add peer");
+  }
+  // Register for a callback function that will be called when data is received
+  esp_now_register_recv_cb(OnDataRecv);
 
   xTaskCreatePinnedToCore(espNowRemoteTask,      /* Task function. */
                             "espNowRemoteTask",  /* name of task. */
@@ -496,7 +542,7 @@ void setup(){
                             &eRemote_t,         /* Task handle to keep track of created task */
                             0);                 /* pin task to core 0 */
   delay(200);
-
+  
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
@@ -509,7 +555,6 @@ void setup(){
   tft_lv_initialization();
   init_disp_driver();
   init_touch_driver();
-
 
   //****Load EEPROOM:
   eject_status = EEPROM.readBool(EJECT);
@@ -846,34 +891,15 @@ void loop()
 
 void espNowRemoteTask(void *pvParameters)
 {
-    WiFi.mode(WIFI_STA);
-    LogDebug(WiFi.macAddress());
-
-    // Init ESP-NOW
-    if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
+  for(;;){
+    if(Ossm_paired){
+      outgoingcontrol.esp_command = HEARTBEAT;
+      outgoingcontrol.esp_heartbeat = true;
+      outgoingcontrol.esp_target = OSSM_ID;
+      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     }
-    // Once ESPNow is successfully Init, we will register for Send CB to
-    // get the status of Trasnmitted packet
-    esp_now_register_send_cb(OnDataSent);
-
-    // register peer
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false;
-  // register first peer  
-  memcpy(peerInfo.peer_addr, Broadcast_Address, 6);
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-    return;
+    vTaskDelay(HEARTBEAT_INTERVAL);
   }
-    // Register for a callback function that will be called when data is received
-    esp_now_register_recv_cb(OnDataRecv);
-
-    for(;;)
-    {
-      vTaskDelay(200);
-    }
 }
 
 /*
