@@ -14,6 +14,9 @@
 #include "ui/ui.h"
 #include <EEPROM.h>
 #include "main.h"
+#include <ESP32SvelteKit.h>
+#include <ESPmDNS.h>
+#include <M5SettingsService.h>
 
 int screenWidth  = 320;
 int screenHeight = 240;
@@ -230,6 +233,12 @@ static lv_indev_drv_t indev_drv; // Descriptor of a touch driver
 M5Display *tft;
 static lv_obj_t * kb;
 
+AsyncWebServer server(80);
+ESP32SvelteKit esp32sveltekit(&server);
+
+M5SettingsService m5SettingsService =
+    M5SettingsService(&server, esp32sveltekit.getFS(), esp32sveltekit.getSecurityManager());
+
 void tft_lv_initialization() {
   M5.begin();
   lv_init();
@@ -401,28 +410,31 @@ void connectbutton(lv_event_t * e)
 void savesettings(lv_event_t * e)
 {
 	if(lv_obj_get_state(ui_ejectaddon) == 1){
-		EEPROM.writeBool(EJECT,true);
+		eject_status = true;
 	} else if(lv_obj_get_state(ui_ejectaddon) == 0){
-		EEPROM.writeBool(EJECT,false);
+		eject_status = false;
 	}
   if(lv_obj_get_state(ui_darkmode) == 1){
-		EEPROM.writeBool(DARKMODE,true);
+		dark_mode = true;
 	} else if(lv_obj_get_state(ui_darkmode) == 0){
-		EEPROM.writeBool(DARKMODE,false);
+		dark_mode = false;
 	}
-  if(lv_obj_get_state(ui_vibrate) == 1){
-		EEPROM.writeBool(VIBRATE,true);
-	} else if(lv_obj_get_state(ui_vibrate) == 0){
-		EEPROM.writeBool(VIBRATE,false);
-	}
-  if(lv_obj_get_state(ui_lefty) == 1){
-		EEPROM.writeBool(LEFTY,true);
-	} else if(lv_obj_get_state(ui_lefty) == 0){
-		EEPROM.writeBool(LEFTY,false);
-	}
-  EEPROM.commit();
-  delay(100);
-  ESP.restart();
+    if(lv_obj_get_state(ui_vibrate) == 1){
+  		vibrate_mode = true;
+  	} else if(lv_obj_get_state(ui_vibrate) == 0){
+  		vibrate_mode = false;
+  	}
+    if(lv_obj_get_state(ui_lefty) == 1){
+      touch_home = true;
+    } else if(lv_obj_get_state(ui_lefty) == 0){
+      touch_home = false;
+    }
+
+    m5SettingsService.callUpdateHandlers();
+    
+    delay(100);
+    ESP.restart();
+
 }
 
 void screenmachine(lv_event_t * e)
@@ -506,31 +518,37 @@ void setupdepthF(lv_event_t * e){
 
 void setup(){
   M5.begin(true, false, true, true); //Init M5Core2.
-  EEPROM.begin(EEPROM_SIZE);
+  esp32sveltekit.setMDNSAppName("LUST-Remote");
+  esp32sveltekit.begin();
+  m5SettingsService.begin();
+  MDNS.addService("stroking", "tcp", 80);
+  MDNS.addServiceTxt("stroking", "tcp", "FirmwareVersion", FIRMWARE_VERSION);
+  MDNS.addServiceTxt("stroking", "tcp", "DeviceID", SettingValue::format("LUST-Remote-#{unique_id}"));
+  server.begin();
 
   M5.Axp.SetCHGCurrent(AXP192::BATTERY_CHARGE_CURRENT);
   M5.Axp.SetLcdVoltage(3000);
   LogDebug("\n Starting");      // Start LogDebug 
 
-  WiFi.mode(WIFI_STA);
-  LogDebug(WiFi.macAddress());
+  //WiFi.mode(WIFI_STA);
+  //LogDebug(WiFi.macAddress());
 
   // Init ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-  }
+  //if (esp_now_init() != ESP_OK) {
+  //  Serial.println("Error initializing ESP-NOW");
+  //}
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Trasnmitted packet
-  esp_now_register_send_cb(OnDataSent);
+  // esp_now_register_send_cb(OnDataSent);
 
   // register peer
-  peerInfo.channel = 0;  
-  peerInfo.encrypt = false;
+  //peerInfo.channel = 0;  
+  //peerInfo.encrypt = false;
   // register first peer  
-  memcpy(peerInfo.peer_addr, OSSM_Address, 6);
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
-    Serial.println("Failed to add peer");
-  }
+ // memcpy(peerInfo.peer_addr, OSSM_Address, 6);
+  //if (esp_now_add_peer(&peerInfo) != ESP_OK){
+ //   Serial.println("Failed to add peer");
+ // }
   // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
 
@@ -542,6 +560,7 @@ void setup(){
                             &eRemote_t,         /* Task handle to keep track of created task */
                             0);                 /* pin task to core 0 */
   delay(200);
+  vTaskSuspend(eRemote_t);
   
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
@@ -552,16 +571,16 @@ void setup(){
   Button2.attachClick(click2);
   Button3.attachClick(click3);
 
+  m5SettingsService.read([&](M5Settings &settings) {
+    dark_mode = settings.darkmode;
+    vibrate_mode = settings.vibrate;
+    touch_home = settings.touch;
+    eject_status = settings.eject;
+  });
+
   tft_lv_initialization();
   init_disp_driver();
   init_touch_driver();
-
-  //****Load EEPROOM:
-  eject_status = EEPROM.readBool(EJECT);
-  dark_mode = EEPROM.readBool(DARKMODE);
-  vibrate_mode = EEPROM.readBool(VIBRATE);
-  touch_home = EEPROM.readBool(LEFTY);
-
   ui_init();
   
   if(eject_status == true){
