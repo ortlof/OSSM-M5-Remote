@@ -211,8 +211,7 @@ bool OSSM_On = false;
 // Tasks:
 
 TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
-
-void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
+//void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
 bool connectbtn(); //Handels Connectbtn
 int64_t touchmenue();
 void vibrate();
@@ -430,7 +429,7 @@ void savesettings(lv_event_t * e)
       touch_home = false;
     }
 
-    m5SettingsService.callUpdateHandlers();
+    //m5SettingsService.callUpdateHandlers();
     
     delay(100);
     ESP.restart();
@@ -521,9 +520,9 @@ void setup(){
   esp32sveltekit.setMDNSAppName("LUST-Remote");
   esp32sveltekit.begin();
   m5SettingsService.begin();
-  MDNS.addService("stroking", "tcp", 80);
-  MDNS.addServiceTxt("stroking", "tcp", "FirmwareVersion", FIRMWARE_VERSION);
-  MDNS.addServiceTxt("stroking", "tcp", "DeviceID", SettingValue::format("LUST-Remote-#{unique_id}"));
+  MDNS.addService("remote", "tcp", 80);
+  MDNS.addServiceTxt("remote", "tcp", "FirmwareVersion", FIRMWARE_VERSION);
+  MDNS.addServiceTxt("remote", "tcp", "DeviceID", SettingValue::format("LUST-Remote-#{unique_id}"));
   server.begin();
 
   M5.Axp.SetCHGCurrent(AXP192::BATTERY_CHARGE_CURRENT);
@@ -550,17 +549,18 @@ void setup(){
  //   Serial.println("Failed to add peer");
  // }
   // Register for a callback function that will be called when data is received
-  esp_now_register_recv_cb(OnDataRecv);
+  //esp_now_register_recv_cb(OnDataRecv);
 
-  xTaskCreatePinnedToCore(espNowRemoteTask,      /* Task function. */
-                            "espNowRemoteTask",  /* name of task. */
-                            4096,               /* Stack size of task */
-                            NULL,               /* parameter of the task */
-                            5,                  /* priority of the task */
-                            &eRemote_t,         /* Task handle to keep track of created task */
-                            0);                 /* pin task to core 0 */
-  delay(200);
-  vTaskSuspend(eRemote_t);
+  //xTaskCreatePinnedToCore(espNowRemoteTask,      /* Task function. */
+  //                          "espNowRemoteTask",  /* name of task. */
+  //                          4096,               /* Stack size of task */
+  //                          NULL,               /* parameter of the task */
+  //                          5,                  /* priority of the task */
+  //                          &eRemote_t,         /* Task handle to keep track of created task */
+  //                          0);                 /* pin task to core 0 */
+
+  //delay(200);
+  //vTaskSuspend(eRemote_t);
   
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
@@ -908,7 +908,7 @@ void loop()
   delay(5);
 }
 
-void espNowRemoteTask(void *pvParameters)
+/*void espNowRemoteTask(void *pvParameters)
 {
   for(;;){
     if(Ossm_paired){
@@ -919,7 +919,7 @@ void espNowRemoteTask(void *pvParameters)
     }
     vTaskDelay(HEARTBEAT_INTERVAL);
   }
-}
+}/*
 
 /*
 void cumscreentask(void *pvParameters)
