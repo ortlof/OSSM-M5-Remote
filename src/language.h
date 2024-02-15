@@ -1,13 +1,14 @@
 //EN
 // Language
-#define T_HEADER            "OSSM Remote"
+#define T_HEADER            "LUST Remote"
 #define T_BLANK             ""
 #define T_MENUE             "Menu"
 #define T_DEMO              "Demo"
 #define T_CONNECT           "Connect"
+#define T_RESCAN            "Rescan"
 #define T_SETTINGS          "Settings"
-#define T_MOTD              "Welcome to OSSM M5 Remote"
-#define T_BATT              "Battery"
+#define T_MOTD              "Welcome to LUST Remote"
+#define T_BATT              "Batt"
 #define T_CREAMPIE          "Creampie"
 #define T_START             "Start/Stop"
 #define T_CUM               "Cum"

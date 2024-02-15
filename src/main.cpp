@@ -1,6 +1,5 @@
 #pragma GCC optimize ("Ofast")
-#include <M5Core2.h>
-#include <AXP192.h>
+#include <M5Unified.h>
 #include <ESP32Encoder.h>
 #include <esp_now.h>
 #include <WiFi.h>
@@ -9,7 +8,7 @@
 #include "config.h"
 #include <Arduino.h>
 #include <Wire.h>
-#include <lvgl.h>
+#include <esp_timer.h>
 #include <SPI.h>
 #include "ui/ui.h"
 #include <EEPROM.h>
@@ -18,8 +17,12 @@
 #include <ESPmDNS.h>
 #include <M5SettingsService.h>
 
-int screenWidth  = 320;
-int screenHeight = 240;
+#define LV_CONF_INCLUDE_SIMPLE
+#include <lvgl.h>
+#include <esp_timer.h>
+
+constexpr int32_t HOR_RES=320;
+constexpr int32_t VER_RES=240;
 
 ///////////////////////////////////////////
 ////
@@ -44,8 +47,8 @@ int screenHeight = 240;
 // Screens 
 
 #define ST_UI_START 0
-#define ST_UI_HOME 1
-
+#define ST_UI_CONNECT 1
+#define ST_UI_HOME 2
 #define ST_UI_MENUE 10
 #define ST_UI_PATTERN 11
 #define ST_UI_Torqe 12
@@ -177,6 +180,11 @@ bool incoming_esp_connected;
 bool incoming_esp_heartbeat;
 int incoming_esp_target;
 
+
+String RemoteIP = "0.0.0.0";
+int mdnsid = 0;
+String mdnstable;
+
 typedef struct struct_message {
   float esp_speed;
   float esp_depth;
@@ -210,7 +218,7 @@ bool OSSM_On = false;
 
 // Tasks:
 
-TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
+//TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
 //void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
 bool connectbtn(); //Handels Connectbtn
 int64_t touchmenue();
@@ -224,61 +232,75 @@ bool click2_short_waspressed = false;
 void click3();
 bool click3_short_waspressed = false;
 
-// init the tft espi
-static lv_disp_draw_buf_t draw_buf;
-static lv_disp_drv_t disp_drv;  // Descriptor of a display driver
-static lv_indev_drv_t indev_drv; // Descriptor of a touch driver
-
-M5Display *tft;
-static lv_obj_t * kb;
-
-AsyncWebServer server(80);
-ESP32SvelteKit esp32sveltekit(&server);
-
+PsychicHttpServer server;
+ESP32SvelteKit esp32sveltekit(&server, 115);
 M5SettingsService m5SettingsService =
     M5SettingsService(&server, esp32sveltekit.getFS(), esp32sveltekit.getSecurityManager());
 
-void tft_lv_initialization() {
-  M5.begin();
-  lv_init();
-  static lv_color_t buf1[(LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10];  // Declare a buffer for 1/10 screen siz
-  static lv_color_t buf2[(LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10];  // second buffer is optionnal
+lv_display_t *display;
+lv_indev_t *indev;
 
-  // Initialize `disp_buf` display buffer with the buffer(s).
-  lv_disp_draw_buf_init(&draw_buf, buf1, buf2, (LV_HOR_RES_MAX * LV_VER_RES_MAX) / 10);
-
-  tft = &M5.Lcd;
-}
+static lv_draw_buf_t *draw_buf1;
+static lv_draw_buf_t *draw_buf2;
 
 // Display flushing
-void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+void my_display_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
 
-  tft->startWrite();
-  tft->setAddrWindow(area->x1, area->y1, w, h);
-  tft->pushColors((uint16_t *)&color_p->full, w * h, true);
-  tft->endWrite();
-
+  lv_draw_sw_rgb565_swap(px_map, w*h);
+  M5.Display.pushImageDMA<uint16_t>(area->x1, area->y1, w, h, (uint16_t *)px_map);
   lv_disp_flush_ready(disp);
 }
 
-void init_disp_driver() {
-  lv_disp_drv_init(&disp_drv);  // Basic initialization
-
-  disp_drv.flush_cb = my_disp_flush;  // Set your driver function
-  disp_drv.draw_buf = &draw_buf;      // Assign the buffer to the display
-  disp_drv.hor_res = LV_HOR_RES_MAX;  // Set the horizontal resolution of the display
-  disp_drv.ver_res = LV_VER_RES_MAX;  // Set the vertical resolution of the display
-
-  lv_disp_drv_register(&disp_drv);                   // Finally register the driver
-  lv_disp_set_bg_color(NULL, lv_color_hex3(0x000));  // Set default background color to black
+uint32_t my_tick_function() {
+  return (esp_timer_get_time() / 1000LL);
 }
 
-void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
+void my_touchpad_read(lv_indev_t * drv, lv_indev_data_t * data) {
+  M5.update();
+  auto count = M5.Touch.getCount();
+
+  if ( count == 0 ) {
+    data->state = LV_INDEV_STATE_RELEASED;
+  } else {
+    auto touch = M5.Touch.getDetail(0);
+    data->state = LV_INDEV_STATE_PRESSED; 
+    data->point.x = touch.x;
+    data->point.y = touch.y;
+  }
+}
+
+// LVGL code - Handle multiple events demo
+
+static void event_cb(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  lv_obj_t *label = reinterpret_cast<lv_obj_t *>(lv_event_get_user_data(e));
+
+  switch (code)
+  {
+  case LV_EVENT_PRESSED:
+    lv_label_set_text(label, "The last button event:\nLV_EVENT_PRESSED");
+    break;
+  case LV_EVENT_CLICKED:
+    lv_label_set_text(label, "The last button event:\nLV_EVENT_CLICKED");
+    break;
+  case LV_EVENT_LONG_PRESSED:
+    lv_label_set_text(label, "The last button event:\nLV_EVENT_LONG_PRESSED");
+    break;
+  case LV_EVENT_LONG_PRESSED_REPEAT:
+    lv_label_set_text(label, "The last button event:\nLV_EVENT_LONG_PRESSED_REPEAT");
+    break;
+  default:
+    break;
+  }
+}
+
+/*void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 {
   if(touch_disabled == false){
-  TouchPoint_t pos = M5.Touch.getPressPoint();
+  TouchPoint_t pos = M5.Touch.my_touchpad_read();
   bool touched = ( pos.x == -1 ) ? false : true;  
 
   if(!touched) {
@@ -303,16 +325,17 @@ void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
   }
   } 
 }
-}
+} */
 
-void init_touch_driver() {
+
+/*void init_touch_driver() {
   lv_disp_drv_register(&disp_drv);
 
   lv_indev_drv_init(&indev_drv);
   indev_drv.type = LV_INDEV_TYPE_POINTER;
   indev_drv.read_cb = my_touchpad_read;
   lv_indev_t * my_indev = lv_indev_drv_register(&indev_drv);  // register
-}
+}*/
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 }
@@ -353,8 +376,8 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     
     if (result == ESP_OK) {
       Ossm_paired = true;
-      lv_label_set_text(ui_connect, "Connected");
-      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+      //lv_label_set_text(ui_connect, "Connected");
+      //lv_screen_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
   }
   switch(incomingcontrol.esp_command)
@@ -398,12 +421,7 @@ bool SendCommand(int Command, float Value, int Target){
 
 void connectbutton(lv_event_t * e)
 {
-    if(!Ossm_paired){
-      outgoingcontrol.esp_command = HEARTBEAT;
-      outgoingcontrol.esp_heartbeat = true;
-      outgoingcontrol.esp_target = OSSM_ID;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-    }
+    
 }
 
 void savesettings(lv_event_t * e)
@@ -436,11 +454,41 @@ void savesettings(lv_event_t * e)
 
 }
 
+void scanmdns(lv_event_t * e)
+{
+  Serial.println("Scanning for services");
+  lv_obj_remove_flag(ui_connect_spinner, LV_OBJ_FLAG_HIDDEN);
+  mdnsid = MDNS.queryService(ServiceName, "tcp");
+    if (mdnsid == 0) {
+        Serial.println("no services found");
+        mdnstable = "no services found";
+    } else {
+        mdnstable = "";
+        Serial.print(mdnsid);
+        Serial.println(" service(s) found");
+        for (int i = 0; i < mdnsid; ++i) {
+            // Print details for each service found
+            mdnstable = mdnstable + ("i + 1: ") + MDNS.hostname(i) + " " + MDNS.IP(i) + "\n";
+            Serial.print("  ");
+            Serial.print(i + 1);
+            Serial.print(": ");
+            Serial.print(MDNS.hostname(i));
+            Serial.print(" (");
+            Serial.print(MDNS.IP(i));
+        }
+        const char* mdnstable_cstr = mdnstable.c_str();
+        lv_obj_add_flag(ui_connect_spinner, LV_OBJ_FLAG_HIDDEN);
+        lv_roller_set_options(ui_connect_roller, mdnstable_cstr, LV_ROLLER_MODE_NORMAL);    
+   }
+}
+
 void screenmachine(lv_event_t * e)
 {
   if (lv_scr_act() == ui_Start){
     st_screens = ST_UI_START;
-  } else if (lv_scr_act() == ui_Home){
+  } else if(lv_scr_act() == ui_Connect){
+    st_screens = ST_UI_CONNECT;
+   } else if (lv_scr_act() == ui_Home){
     st_screens = ST_UI_HOME;
     speed = lv_slider_get_value(ui_homespeedslider);
     speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, speedscale);
@@ -515,41 +563,27 @@ void setupdepthF(lv_event_t * e){
     SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
 }
 
+
+char string[16];
+uint32_t f;
+
 void setup(){
-  M5.begin(true, false, true, true); //Init M5Core2.
-  esp32sveltekit.setMDNSAppName("LUST-Remote");
+  Serial.begin(115200);
+  M5.begin(); //Init M5Core2.
+  ESP_LOGI("main", "Starting Psychic HTTP Server");
+  // start the framework and demo project
+  esp32sveltekit.setMDNSAppName(APP_NAME);
+  ESP_LOGI("main", "Starting ESP32-SvelteKit");
+  // start ESP32-SvelteKit
   esp32sveltekit.begin();
+  ESP_LOGI("main", "Starting LightStateService");
   m5SettingsService.begin();
-  MDNS.addService("remote", "tcp", 80);
-  MDNS.addServiceTxt("remote", "tcp", "FirmwareVersion", FIRMWARE_VERSION);
-  MDNS.addServiceTxt("remote", "tcp", "DeviceID", SettingValue::format("LUST-Remote-#{unique_id}"));
-  server.begin();
+  ESP_LOGI("main", "Ready");
+  
 
-  M5.Axp.SetCHGCurrent(AXP192::BATTERY_CHARGE_CURRENT);
-  M5.Axp.SetLcdVoltage(3000);
+  //M5.Axp.SetCHGCurrent(AXP192::BATTERY_CHARGE_CURRENT);
+  //M5.Axp.SetLcdVoltage(3000);
   LogDebug("\n Starting");      // Start LogDebug 
-
-  //WiFi.mode(WIFI_STA);
-  //LogDebug(WiFi.macAddress());
-
-  // Init ESP-NOW
-  //if (esp_now_init() != ESP_OK) {
-  //  Serial.println("Error initializing ESP-NOW");
-  //}
-  // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet
-  // esp_now_register_send_cb(OnDataSent);
-
-  // register peer
-  //peerInfo.channel = 0;  
-  //peerInfo.encrypt = false;
-  // register first peer  
- // memcpy(peerInfo.peer_addr, OSSM_Address, 6);
-  //if (esp_now_add_peer(&peerInfo) != ESP_OK){
- //   Serial.println("Failed to add peer");
- // }
-  // Register for a callback function that will be called when data is received
-  //esp_now_register_recv_cb(OnDataRecv);
 
   //xTaskCreatePinnedToCore(espNowRemoteTask,      /* Task function. */
   //                          "espNowRemoteTask",  /* name of task. */
@@ -561,6 +595,7 @@ void setup(){
 
   //delay(200);
   //vTaskSuspend(eRemote_t);
+  
   
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
   encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
@@ -578,10 +613,27 @@ void setup(){
     eject_status = settings.eject;
   });
 
-  tft_lv_initialization();
-  init_disp_driver();
-  init_touch_driver();
-  ui_init();
+  // Initialize `disp_buf` display buffer with the buffer(s).
+  // lv_draw_buf_init(&draw_buf, LV_HOR_RES_MAX, LV_VER_RES_MAX);
+  M5.Display.setEpdMode(epd_mode_t::epd_fastest); // fastest but very-low quality.
+  if (M5.Display.width() < M5.Display.height())
+  { /// Landscape mode.
+  M5.Display.setRotation(M5.Display.getRotation() ^ 1);
+  }
+
+  lv_init();
+  lv_tick_set_cb(my_tick_function);
+
+  display = lv_display_create(HOR_RES, VER_RES);
+  lv_display_set_flush_cb(display, my_display_flush);
+
+  static lv_color_t buf1[HOR_RES * 15]; 
+  lv_display_set_buffers(display, buf1, nullptr, sizeof(buf1), LV_DISPLAY_RENDER_MODE_PARTIAL);
+
+  indev = lv_indev_create();
+  lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
+  lv_indev_set_read_cb(indev, my_touchpad_read);
+  ui_m5init();  
   
   if(eject_status == true){
   lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
@@ -600,13 +652,29 @@ void setup(){
   lv_roller_set_selected(ui_PatternS,2,LV_ANIM_OFF);
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
+  if (!MDNS.begin("ESP32_Browser")) {
+        Serial.println("Error setting up MDNS responder!");
+        while(1){
+            delay(500);
+        }
+  }
+
 }
 
 void loop()
 {
-     const int BatteryLevel = M5.Axp.GetBatteryLevel();
+     
+     const int BatteryLevel = M5.Power.Axp192.getBatteryLevel();
      String BatteryValue = (String(BatteryLevel, DEC) + "%");
      const char *battVal = BatteryValue.c_str();
+     const int WifiRssi = WiFi.RSSI();
+     String WifiName = WiFi.SSID();
+     String WifiValue = (WifiName + " " + String(WifiRssi, DEC) + " dBm");
+     const char *wifiVal = WifiValue.c_str();
+     lv_label_set_text(ui_connect_start, wifiVal);
+     lv_label_set_text(ui_connect_connect, wifiVal);
+     lv_label_set_text(ui_connect_home, wifiVal);
+
      lv_bar_set_value(ui_Battery, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue, battVal);
      lv_bar_set_value(ui_Battery1, BatteryLevel, LV_ANIM_OFF);
@@ -619,23 +687,39 @@ void loop()
      lv_label_set_text(ui_BattValue4, battVal);
      lv_bar_set_value(ui_Battery5, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue5, battVal);
-
+     if(WiFi.isConnected() == true){
+       lv_obj_clear_state(ui_StartButtonL, LV_STATE_DISABLED);
+     }
+     
      M5.update();
      lv_task_handler();
+     
      Button1.tick();
      Button2.tick();
      Button3.tick();
-
+    
      switch(st_screens){
       
      case ST_UI_START:
       {
         if(click2_short_waspressed == true){
-         lv_event_send(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_StartButtonM, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_StartButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
+        }
+      }
+      break;
+
+      case ST_UI_CONNECT:
+      {
+        if(click2_short_waspressed == true){
+         lv_obj_send_event(ui_ConnectButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_obj_send_event(ui_ConnectButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_obj_send_event(ui_ConnectButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
       break;
@@ -737,11 +821,11 @@ void loop()
         }
 
         if(click2_short_waspressed == true){
-         lv_event_send(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
+          lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
         }
         
 
@@ -764,11 +848,11 @@ void loop()
         }
 
         if(click2_short_waspressed == true){
-         lv_event_send(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event((lv_obj_t*)ui_MenueButtonL, LV_EVENT_CLICKED,NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event((lv_obj_t*)ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(lv_group_get_focused(ui_g_menue), LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event((lv_obj_t*)ui_MenueButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
       break;
@@ -781,20 +865,20 @@ void loop()
         if(encoder4.getCount() > encoder4_enc + 2){
           LogDebug("next");
           uint32_t t = LV_KEY_DOWN;
-          lv_event_send(ui_PatternS, LV_EVENT_KEY, &t);
+          lv_obj_send_event(ui_PatternS, LV_EVENT_KEY, &t);
           encoder4_enc = encoder4.getCount();
         } else if(encoder4.getCount() < encoder4_enc -2){
           uint32_t t = LV_KEY_UP;
-          lv_event_send(ui_PatternS, LV_EVENT_KEY, &t);
+          lv_obj_send_event(ui_PatternS, LV_EVENT_KEY, &t);
           LogDebug("Preview");
           encoder4_enc = encoder4.getCount();
         }
-         if(click2_short_waspressed == true){
-         lv_event_send(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
+        if(click2_short_waspressed == true){
+         lv_obj_send_event(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
       break;
@@ -851,11 +935,11 @@ void loop()
         lv_label_set_text(ui_introqevalue, torqe_r_v);
 
          if(click2_short_waspressed == true){
-         lv_event_send(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_TorqeButtonM, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_TorqeButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(ui_TorqeButtonR, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_TorqeButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
       break;
@@ -867,9 +951,9 @@ void loop()
         }
         
          if(click2_short_waspressed == true){
-         lv_event_send(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
          
         }
@@ -890,22 +974,24 @@ void loop()
         }
 
         if(click2_short_waspressed == true){
-         lv_event_send(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
-         lv_event_send(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         lv_event_send(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
+         lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
       break;
 
      }
+     
      mxclick_long_waspressed = false;
      mxclick_short_waspressed = false;
      click2_short_waspressed = false;
      click3_short_waspressed = false;
+  
+  delay(50);
 
-  delay(5);
 }
 
 /*void espNowRemoteTask(void *pvParameters)
@@ -973,9 +1059,9 @@ void cumscreentask(void *pvParameters)
 
 void vibrate(){
     if(vibrate_mode == true){
-    M5.Axp.SetLDOEnable(3,true);
+    M5.Power.Axp192.setLDO3(true);
     vTaskDelay(300);
-    M5.Axp.SetLDOEnable(3,false);
+    M5.Power.Axp192.setLDO3(false);
     }
 }
 

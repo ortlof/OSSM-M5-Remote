@@ -54,7 +54,7 @@ public:
 class M5SettingsService : public StatefulService<M5Settings>
 {
 public:
-    M5SettingsService(AsyncWebServer *server, FS *fs, SecurityManager *securityManager);
+    M5SettingsService(PsychicHttpServer *server, FS *fs, SecurityManager *securityManager);
     void begin();
 
 private:

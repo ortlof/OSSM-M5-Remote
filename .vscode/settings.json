@@ -2,7 +2,8 @@
     "files.associations": {
         "functional": "cpp",
         "m5core2.h": "c",
-        "string": "cpp"
+        "string": "cpp",
+        "main.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false
 }

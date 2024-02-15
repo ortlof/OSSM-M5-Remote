@@ -12,7 +12,6 @@
  **/
 
 #include <DownloadFirmwareService.h>
-static const char *TAG = "Download OTA";
 
 extern const uint8_t rootca_crt_bundle_start[] asm("_binary_src_certs_x509_crt_bundle_bin_start");
 
@@ -38,7 +37,7 @@ void update_progress(int currentBytes, int totalBytes)
         doc["progress"] = progress;
         serializeJson(doc, output);
         _notificationEvents->send(output, "download_ota", millis());
-        ESP_LOGV(TAG, "HTTP update process at %d of %d bytes... (%d %%)", currentBytes, totalBytes, progress);
+        ESP_LOGV("Download OTA", "HTTP update process at %d of %d bytes... (%d %%)", currentBytes, totalBytes, progress);
     }
     previousProgress = progress;
 }
@@ -80,7 +79,10 @@ void updateTask(void *param)
         serializeJson(doc, output);
         _notificationEvents->send(output, "download_ota", millis());
 
+        ESP_LOGE("Download OTA", "HTTP Update failed with error (%d): %s", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+#ifdef SERIAL_INFO
         Serial.printf("HTTP Update failed with error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
+#endif
         break;
     case HTTP_UPDATE_NO_UPDATES:
 
@@ -89,32 +91,51 @@ void updateTask(void *param)
         serializeJson(doc, output);
         _notificationEvents->send(output, "download_ota", millis());
 
+        ESP_LOGE("Download OTA", "HTTP Update failed, has same firmware version");
+#ifdef SERIAL_INFO
         Serial.println("HTTP Update failed, has same firmware version");
+#endif
         break;
     case HTTP_UPDATE_OK:
+        ESP_LOGI("Download OTA", "HTTP Update successful - Restarting");
+#ifdef SERIAL_INFO
         Serial.println("HTTP Update successful - Restarting");
+#endif
         break;
     }
     vTaskDelete(NULL);
 }
 
-DownloadFirmwareService::DownloadFirmwareService(AsyncWebServer *server, SecurityManager *securityManager, NotificationEvents *notificationEvents) : _securityManager(securityManager),
-                                                                                                                                                     _downloadHandler(GITHUB_FIRMWARE_PATH,
-                                                                                                                                                                      _securityManager->wrapCallback(
-                                                                                                                                                                          std::bind(&DownloadFirmwareService::downloadUpdate, this, std::placeholders::_1, std::placeholders::_2),
-                                                                                                                                                                          AuthenticationPredicates::IS_ADMIN))
+DownloadFirmwareService::DownloadFirmwareService(PsychicHttpServer *server, SecurityManager *securityManager, NotificationEvents *notificationEvents) : _server(server),
+                                                                                                                                                        _securityManager(securityManager),
+                                                                                                                                                        _notificationEvents(notificationEvents)
 
 {
-    _notificationEvents = notificationEvents;
-    _downloadHandler.setMethod(HTTP_POST);
-    _downloadHandler.setMaxContentLength(MAX_GITHUB_SIZE);
-    server->addHandler(&_downloadHandler);
 }
 
-void DownloadFirmwareService::downloadUpdate(AsyncWebServerRequest *request, JsonVariant &json)
+void DownloadFirmwareService::begin()
 {
+    _server->on(GITHUB_FIRMWARE_PATH,
+                HTTP_POST,
+                _securityManager->wrapCallback(
+                    std::bind(&DownloadFirmwareService::downloadUpdate, this, std::placeholders::_1, std::placeholders::_2),
+                    AuthenticationPredicates::IS_ADMIN));
+
+    ESP_LOGV("DownloadFirmwareService", "Registered POST endpoint: %s", GITHUB_FIRMWARE_PATH);
+}
+
+esp_err_t DownloadFirmwareService::downloadUpdate(PsychicRequest *request, JsonVariant &json)
+{
+    if (!json.is<JsonObject>())
+    {
+        return request->reply(400);
+    }
+
     String downloadURL = json["download_url"];
+    ESP_LOGI("Download OTA", "Starting OTA from: %s", downloadURL.c_str());
+#ifdef SERIAL_INFO
     Serial.println("Starting OTA from: " + downloadURL);
+#endif
 
     doc["status"] = "preparing";
     doc["progress"] = 0;
@@ -134,9 +155,8 @@ void DownloadFirmwareService::downloadUpdate(AsyncWebServerRequest *request, Jso
             1                           // Have it on application core
             ) != pdPASS)
     {
-        ESP_LOGE(TAG, "Couldn't create download OTA task");
-        request->send(500);
-        return;
+        ESP_LOGE("Download OTA", "Couldn't create download OTA task");
+        return request->reply(500);
     }
-    request->send(200);
+    return request->reply(200);
 }

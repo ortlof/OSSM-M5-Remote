@@ -1,8 +1,3 @@
-// SquareLine LVGL GENERATED FILE
-// EDITOR VERSION: SquareLine Studio 1.0.5
-// LVGL VERSION: 8.2
-// PROJECT: OSSM-White
-
 #include "ui_helpers.h"
 
 void _ui_bar_set_property(lv_obj_t * target, int id, int val)
@@ -49,24 +44,24 @@ void _ui_slider_set_property(lv_obj_t * target, int id, int val)
 }
 
 
-void _ui_screen_change(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay)
+void _ui_screen_change(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay)
 {
-    lv_scr_load_anim(target, fademode, spd, delay, false);
+    lv_screen_load_anim(target, fademode, spd, delay, false);
 }
 
-void _ui_arc_increment(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay)
+void _ui_arc_increment(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay)
 {
-    lv_scr_load_anim(target, fademode, spd, delay, false);
+    lv_screen_load_anim(target, fademode, spd, delay, false);
 }
 
-void _ui_bar_increment(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay)
+void _ui_bar_increment(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay)
 {
-    lv_scr_load_anim(target, fademode, spd, delay, false);
+    lv_screen_load_anim(target, fademode, spd, delay, false);
 }
 
-void _ui_slider_increment(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay)
+void _ui_slider_increment(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay)
 {
-    lv_scr_load_anim(target, fademode, spd, delay, false);
+    lv_screen_load_anim(target, fademode, spd, delay, false);
 }
 
 void _ui_flag_modify(lv_obj_t * target, int32_t flag, int value)

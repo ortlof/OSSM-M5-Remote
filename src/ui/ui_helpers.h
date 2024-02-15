@@ -1,7 +1,4 @@
-// SquareLine LVGL GENERATED FILE
-// EDITOR VERSION: SquareLine Studio 1.0.5
-// LVGL VERSION: 8.2
-// PROJECT: OSSM-White
+
 
 #define _OSSM-WHITE_UI_HELPERS_H
 
@@ -39,13 +36,13 @@ void _ui_roller_set_property(lv_obj_t * target, int id, int val);
 #define _UI_SLIDER_PROPERTY_VALUE_WITH_ANIM 1
 void _ui_slider_set_property(lv_obj_t * target, int id, int val);
 
-void _ui_screen_change(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay);
+void _ui_screen_change(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay);
 
-void _ui_arc_increment(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay);
+void _ui_arc_increment(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay);
 
-void _ui_bar_increment(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay);
+void _ui_bar_increment(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay);
 
-void _ui_slider_increment(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay);
+void _ui_slider_increment(lv_obj_t * target, lv_screen_load_anim_t fademode, int spd, int delay);
 
 #define _UI_MODIFY_FLAG_ADD 0
 #define _UI_MODIFY_FLAG_REMOVE 1

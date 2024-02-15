@@ -1,7 +1,7 @@
 #include <M5SettingsService.h>
 #include <main.h>
 
-M5SettingsService::M5SettingsService(AsyncWebServer *server, FS *fs, SecurityManager *securityManager) : _httpEndpoint(M5Settings::read,
+M5SettingsService::M5SettingsService(PsychicHttpServer *server, FS *fs, SecurityManager *securityManager) : _httpEndpoint(M5Settings::read,
                                                                                                                         M5Settings::update, 
                                                                                                                         this, 
                                                                                                                         server, 
@@ -18,6 +18,7 @@ M5SettingsService::M5SettingsService(AsyncWebServer *server, FS *fs, SecurityMan
 
 void M5SettingsService::begin()
 {
+    _httpEndpoint.begin();
     _fsPersistence.readFromFS();
 }
 
