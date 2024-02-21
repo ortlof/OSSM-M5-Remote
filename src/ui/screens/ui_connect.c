@@ -205,12 +205,13 @@ void ui_Connect_screen_init(void)
 
     // ui_Connect_Spinner
 
-    ui_connect_spinner = lv_spinner_create(ui_Connect);
-    lv_obj_set_size(ui_connect_spinner, 40, 40);
-    lv_obj_set_x(ui_connect_spinner, -50);
-    lv_obj_set_y(ui_connect_spinner, -55);
-    lv_obj_center(ui_connect_spinner);
-    lv_spinner_set_anim_params(ui_connect_spinner, 10000, 200);
+    ui_connect_spinner = lv_label_create(ui_Start);
+    lv_obj_set_width(ui_connect_spinner, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_connect_spinner, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_connect_spinner, 0);
+    lv_obj_set_y(ui_connect_spinner, -70);
+    lv_obj_set_align(ui_connect_spinner, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_connect_spinner, T_SCAN);
     lv_obj_add_flag(ui_connect_spinner, LV_OBJ_FLAG_HIDDEN);
 
     // ui_PatternS

@@ -16,6 +16,8 @@
 #include <ESP32SvelteKit.h>
 #include <ESPmDNS.h>
 #include <M5SettingsService.h>
+#include <HTTPClient.h>
+#include "ArduinoJson.h"
 
 #define LV_CONF_INCLUDE_SIMPLE
 #include <lvgl.h>
@@ -136,14 +138,25 @@ long cum_s_enc = 0;
 long cum_a_enc = 0;
 long encoder4_enc = 0;
 
-extern float maxdepthinmm = 180.0;
-extern float speedlimit = 600;
+extern float depth_limit = 0;
+extern float stroke_limit = 0;
+extern float rate_limit = 0;
+
 int speedscale = 0;
 
-float speed = 0.0;
-float depth = 0.0;
-float stroke = 0.0;
-float sensation = 0.0;
+float travel;
+float depth;
+float stroke;
+float rate;
+float sensation;
+String patterns;
+bool vibrationOverride;
+float vibrationAmplitude;
+float vibrationFrequency;
+
+
+
+
 float torqe_f = 100.0;
 float torqe_r = -180.0;
 float cum_time = 0.0;
@@ -181,7 +194,7 @@ bool incoming_esp_heartbeat;
 int incoming_esp_target;
 
 
-String RemoteIP = "0.0.0.0";
+String OSSM_IP = "0.0.0.0";
 int mdnsid = 0;
 String mdnstable;
 
@@ -204,10 +217,9 @@ bool Ossm_paired = false;
 struct_message outgoingcontrol;
 struct_message incomingcontrol;
 
-esp_now_peer_info_t peerInfo;
-uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast to all ESP32s, upon connection gets updated to the actual address
-
 #define HEARTBEAT_INTERVAL 5000/portTICK_PERIOD_MS	// 5 seconds
+
+
 
 // Bool
 
@@ -297,49 +309,7 @@ static void event_cb(lv_event_t *e)
   }
 }
 
-/*void my_touchpad_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
-{
-  if(touch_disabled == false){
-  TouchPoint_t pos = M5.Touch.my_touchpad_read();
-  bool touched = ( pos.x == -1 ) ? false : true;  
-
-  if(!touched) {
-      data->state = LV_INDEV_STATE_RELEASED;
-  } else {
-    if (M5.BtnA.wasPressed()){  // tab 1 : A Button
-      LogDebug("ButtonA");
-      data->point.x = 80; data->point.y = 220; // mouse position x,y
-      data->state =LV_INDEV_STATE_PR; M5.update();
-      } else if (M5.BtnB.wasPressed()){  // tab 2 : B Button
-      LogDebug("ButtonB");
-      data->point.x = 160; data->point.y = 220;
-      data->state =LV_INDEV_STATE_PR; M5.update();
-      } else if (M5.BtnC.wasPressed()){  // tab 3 : C Button
-      LogDebug("ButtonC");
-      data->point.x = 270; data->point.y = 220;
-      data->state =LV_INDEV_STATE_PR; M5.update();
-      } else {
-    data->state = LV_INDEV_STATE_PRESSED; 
-    data->point.x = pos.x;
-    data->point.y = pos.y;
-  }
-  } 
-}
-} */
-
-
-/*void init_touch_driver() {
-  lv_disp_drv_register(&disp_drv);
-
-  lv_indev_drv_init(&indev_drv);
-  indev_drv.type = LV_INDEV_TYPE_POINTER;
-  indev_drv.read_cb = my_touchpad_read;
-  lv_indev_t * my_indev = lv_indev_drv_register(&indev_drv);  // register
-}*/
-
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-}
-
+/*
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
 
@@ -396,9 +366,9 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     break;
     }
 }
+*/
 
-//Sends Commands and Value to Remote device returns ture or false if sended
-bool SendCommand(int Command, float Value, int Target){
+/*bool SendCommand(int Command, float Value, int Target){
   
   if(Ossm_paired == true){
 
@@ -417,11 +387,28 @@ bool SendCommand(int Command, float Value, int Target){
       return false;
     }
   }
-}
+}*/
 
 void connectbutton(lv_event_t * e)
 {
-    
+  int connectid = lv_roller_get_selected(ui_connect_roller);
+  OSSM_IP = MDNS.IP(connectid).toString();
+  Serial.print(OSSM_IP);
+  HTTPClient http;
+  String serverpath = "http://" + OSSM_IP + "/rest/environment";
+  http.begin(serverpath.c_str());
+  int httpResponseCode = http.GET();
+  String payload = http.getString();
+  Serial.println(payload);
+  StaticJsonDocument<256> doc;
+  deserializeJson(doc, payload);
+  travel = doc["travel"];
+  rate_limit = doc["max_rate"];
+  pattern = doc["pattern"];
+  Serial.println(travel);
+  Serial.println(rate_limit);
+  Serial.println(patterns);
+  http.end();
 }
 
 void savesettings(lv_event_t * e)
@@ -468,7 +455,9 @@ void scanmdns(lv_event_t * e)
         Serial.println(" service(s) found");
         for (int i = 0; i < mdnsid; ++i) {
             // Print details for each service found
-            mdnstable = mdnstable + ("i + 1: ") + MDNS.hostname(i) + " " + MDNS.IP(i) + "\n";
+            String Hostname = MDNS.hostname(i).c_str();
+            String IP = MDNS.IP(i).toString();
+            mdnstable = mdnstable + " "+ Hostname + " " + IP + "\n";
             Serial.print("  ");
             Serial.print(i + 1);
             Serial.print(": ");
@@ -490,16 +479,16 @@ void screenmachine(lv_event_t * e)
     st_screens = ST_UI_CONNECT;
    } else if (lv_scr_act() == ui_Home){
     st_screens = ST_UI_HOME;
-    speed = lv_slider_get_value(ui_homespeedslider);
-    speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, speedscale);
+    rate = lv_slider_get_value(ui_homespeedslider);
+    speedenc =  fscale(0.5, rate_limit, 0, Encoder_MAP, rate, speedscale);
     encoder1.setCount(speedenc); 
 
     depth = lv_slider_get_value(ui_homedepthslider);       
-    depthenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, depth, 0);
+    depthenc =  fscale(0, depth_limit, 0, Encoder_MAP, depth, 0);
     encoder2.setCount(depthenc);
             
     stroke = lv_slider_get_value(ui_homestrokeslider);    
-    strokeenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, stroke, 0);
+    strokeenc =  fscale(0, depth_limit, 0, Encoder_MAP, stroke, 0);
     encoder3.setCount(strokeenc);
 
     sensation = lv_slider_get_value(ui_homesensationslider);
@@ -543,26 +532,25 @@ void savepattern(lv_event_t * e){
   lv_label_set_text(ui_HomePatternLabel,patternstr);
   LogDebug(pattern);
   float patterns = pattern;
-  SendCommand(PATTERN, patterns, OSSM_ID);
+  //SendCommand(PATTERN, patterns, OSSM_ID);
 }
 
 void homebuttonmevent(lv_event_t * e){
   LogDebug("HomeButton");
   if(OSSM_On == false){
-    SendCommand(ON, 0.0, OSSM_ID);
+    //SendCommand(ON, 0.0, OSSM_ID);
   } else if(OSSM_On == true){
-    SendCommand(OFF, 0.0, OSSM_ID);
+    //SendCommand(OFF, 0.0, OSSM_ID);
   }
 }
 
 void setupDepthInter(lv_event_t * e){
-    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
+   //SendCommand(SETUP_D_I, 0.0, OSSM_ID);
 }
 
 void setupdepthF(lv_event_t * e){
-    SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
+    //SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
 }
-
 
 char string[16];
 uint32_t f;
@@ -714,6 +702,21 @@ void loop()
 
       case ST_UI_CONNECT:
       {
+        if(touch_home == true){
+          touch_disabled = true;
+        }
+        if(encoder4.getCount() > encoder4_enc + 2){
+          LogDebug("next");
+          uint32_t t = LV_KEY_DOWN;
+          lv_obj_send_event(ui_connect_roller, LV_EVENT_KEY, &t);
+          encoder4_enc = encoder4.getCount();
+        } else if(encoder4.getCount() < encoder4_enc -2){
+          uint32_t t = LV_KEY_UP;
+          lv_obj_send_event(ui_connect_roller, LV_EVENT_KEY, &t);
+          LogDebug("Preview");
+          encoder4_enc = encoder4.getCount();
+        }
+
         if(click2_short_waspressed == true){
          lv_obj_send_event(ui_ConnectButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
@@ -732,24 +735,24 @@ void loop()
         // Encoder 1 Speed 
         if(lv_slider_is_dragged(ui_homespeedslider) == false){
           if (encoder1.getCount() != speedenc){
-            lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
+            lv_slider_set_value(ui_homespeedslider, rate, LV_ANIM_OFF);
             if(encoder1.getCount() <= 0){
               encoder1.setCount(0);
             } else if (encoder1.getCount() >= Encoder_MAP){
               encoder1.setCount(Encoder_MAP);
             } 
             speedenc = encoder1.getCount();
-            speed = fscale(0, Encoder_MAP, 0, speedlimit, speedenc, speedscale);
-            SendCommand(SPEED, speed, OSSM_ID);
+            rate = fscale(0, Encoder_MAP, 0, rate_limit, speedenc, speedscale);
+            //SendCommand(SPEED, rate, OSSM_ID);
           }
-        } else if(lv_slider_get_value(ui_homespeedslider) != speed){
-            speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, speedscale);
+        } else if(lv_slider_get_value(ui_homespeedslider) != rate){
+            speedenc =  fscale(0.5, rate_limit, 0, Encoder_MAP, rate, speedscale);
             encoder1.setCount(speedenc);
-            speed = lv_slider_get_value(ui_homespeedslider);
-            SendCommand(SPEED, speed, OSSM_ID);
+            rate = lv_slider_get_value(ui_homespeedslider);
+            //SendCommand(SPEED, rate, OSSM_ID);
         }
         char speed_v[7];
-        dtostrf(speed, 6, 0, speed_v);
+        dtostrf(rate, 6, 0, speed_v);
         lv_label_set_text(ui_homespeedvalue, speed_v);
 
 
@@ -763,14 +766,14 @@ void loop()
               encoder2.setCount(Encoder_MAP);
             } 
             depthenc = encoder2.getCount();
-            depth = fscale(0, Encoder_MAP, 0, maxdepthinmm, depthenc, 0);
-            SendCommand(DEPTH, depth, OSSM_ID);
+            depth = fscale(0, Encoder_MAP, 0, depth_limit, depthenc, 0);
+            //SendCommand(DEPTH, depth, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homedepthslider) != depth){
-            depthenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, depth, 0);
+            depthenc =  fscale(0, depth_limit, 0, Encoder_MAP, depth, 0);
             encoder2.setCount(depthenc);
             depth = lv_slider_get_value(ui_homedepthslider);
-            SendCommand(DEPTH, depth, OSSM_ID);
+            //SendCommand(DEPTH, depth, OSSM_ID);
         }
         char depth_v[7];
         dtostrf(depth, 6, 0, depth_v);
@@ -787,14 +790,14 @@ void loop()
               encoder3.setCount(Encoder_MAP);
             } 
             strokeenc = encoder3.getCount();
-            stroke = fscale(0, Encoder_MAP, 0, maxdepthinmm, strokeenc, 0);
-            SendCommand(STROKE, stroke, OSSM_ID);
+            stroke = fscale(0, Encoder_MAP, 0, depth_limit, strokeenc, 0);
+            //SendCommand(STROKE, stroke, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homestrokeslider) != stroke){
-            strokeenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, stroke, 0);
+            strokeenc =  fscale(0, depth_limit, 0, Encoder_MAP, stroke, 0);
             encoder3.setCount(strokeenc);
             stroke = lv_slider_get_value(ui_homestrokeslider);
-            SendCommand(STROKE, stroke, OSSM_ID);
+           // SendCommand(STROKE, stroke, OSSM_ID);
         }
         char stroke_v[7];
         dtostrf(stroke, 6, 0, stroke_v);
@@ -811,13 +814,13 @@ void loop()
             } 
             sensationenc = encoder4.getCount();
             sensation = fscale((Encoder_MAP/2*-1), (Encoder_MAP/2), -100, 100, sensationenc, 0);
-            SendCommand(SENSATION, sensation, OSSM_ID);
+            //SendCommand(SENSATION, sensation, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homesensationslider) != sensation){
             sensationenc =  fscale(-100, 100, (Encoder_MAP/2*-1), (Encoder_MAP/2), sensation, 0);
             encoder4.setCount(sensationenc);
             sensation = lv_slider_get_value(ui_homesensationslider);
-            SendCommand(SENSATION, sensation, OSSM_ID);
+            //SendCommand(SENSATION, sensation, OSSM_ID);
         }
 
         if(click2_short_waspressed == true){
@@ -899,13 +902,13 @@ void loop()
             } 
             torqe_f_enc = encoder1.getCount();
             torqe_f = fscale(0, Encoder_MAP, 50, 200, torqe_f_enc, 0);
-            SendCommand(TORQE_F, torqe_f, OSSM_ID);
+            //SendCommand(TORQE_F, torqe_f, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_outtroqeslider) != torqe_f){
             torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
             encoder1.setCount(torqe_f_enc);
             torqe_f = lv_slider_get_value(ui_outtroqeslider);
-            SendCommand(TORQE_F, torqe_f, OSSM_ID);
+            //SendCommand(TORQE_F, torqe_f, OSSM_ID);
         }
         char torqe_f_v[7];
         dtostrf((torqe_f*-1), 6, 0, torqe_f_v);
@@ -922,13 +925,13 @@ void loop()
             } 
             torqe_r_enc = encoder4.getCount();
             torqe_r = fscale(0, Encoder_MAP, 20, 200, torqe_r_enc, 0);
-            SendCommand(TORQE_R, torqe_r, OSSM_ID);
+            //SendCommand(TORQE_R, torqe_r, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_introqeslider) != torqe_r){
             torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
             encoder4.setCount(torqe_r_enc);
             torqe_r = lv_slider_get_value(ui_introqeslider);
-            SendCommand(TORQE_R, torqe_r, OSSM_ID);
+            //SendCommand(TORQE_R, torqe_r, OSSM_ID);
         }
         char torqe_r_v[7];
         dtostrf(torqe_r, 6, 0, torqe_r_v);
@@ -1059,9 +1062,10 @@ void cumscreentask(void *pvParameters)
 
 void vibrate(){
     if(vibrate_mode == true){
-    M5.Power.Axp192.setLDO3(true);
-    vTaskDelay(300);
-    M5.Power.Axp192.setLDO3(false);
+    M5.Power.setVibration(255);
+    //M5.Power.Axp192.setLDO3(true);
+    //M5.Power.Axp192.setLDO3(false);
+    M5.Power.setVibration(0);
     }
 }
 

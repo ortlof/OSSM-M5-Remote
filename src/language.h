@@ -2,6 +2,7 @@
 // Language
 #define T_HEADER            "LUST Remote"
 #define T_BLANK             ""
+#define T_SCAN              "Scannning for LUST Wait..."
 #define T_MENUE             "Menu"
 #define T_DEMO              "Demo"
 #define T_CONNECT           "Connect"

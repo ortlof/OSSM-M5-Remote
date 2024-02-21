@@ -3,7 +3,9 @@
         "functional": "cpp",
         "m5core2.h": "c",
         "string": "cpp",
-        "main.h": "c"
+        "main.h": "c",
+        "*.tcc": "cpp",
+        "regex": "cpp"
     },
     "C_Cpp.dimInactiveRegions": false
 }

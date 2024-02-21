@@ -223,7 +223,6 @@ void ui_event_ConnectButtonL(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
-        connectbutton(e);
     }
 }
 void ui_event_ConnectButtonM(lv_event_t * e)
@@ -239,6 +238,7 @@ void ui_event_ConnectButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
+        connectbutton(e);
     }
 }
 
