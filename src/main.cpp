@@ -18,6 +18,8 @@
 #include <M5SettingsService.h>
 #include <HTTPClient.h>
 #include "ArduinoJson.h"
+#include <PsychicHttpServer.h>
+#include <WebSocketsClient.h> // WebSocket Client Library for WebSocket
 
 #define LV_CONF_INCLUDE_SIMPLE
 #include <lvgl.h>
@@ -122,7 +124,8 @@ int S3Pos;
 int S4Pos;
 bool rstate = false;
 int pattern = 2;
-char patternstr[20];
+
+String patterns = "";
 bool onoff = false;
 
 
@@ -138,24 +141,24 @@ long cum_s_enc = 0;
 long cum_a_enc = 0;
 long encoder4_enc = 0;
 
-extern float depth_limit = 0;
-extern float stroke_limit = 0;
-extern float rate_limit = 0;
+float depth_limit = 0;
+float stroke_limit = 0;
+float rate_limit = 0;
+bool heartbeat_mode = false;
+long ease_in_speed = 0;
 
 int speedscale = 0;
 
+String command = "STOP";
 float travel;
 float depth;
 float stroke;
 float rate;
+char patternstr[20];
 float sensation;
-String patterns;
-bool vibrationOverride;
-float vibrationAmplitude;
-float vibrationFrequency;
-
-
-
+bool vibration_override;
+float vibration_amplitude;
+float vibration_frequency;
 
 float torqe_f = 100.0;
 float torqe_r = -180.0;
@@ -172,50 +175,18 @@ ESP32Encoder encoder4;
 // Variable to store if sending data was successful
 String success;
 
-float out_esp_speed;
-float out_esp_depth;
-float out_esp_stroke;
-float out_esp_sensation;
-float out_esp_pattern;
-bool out_esp_rstate;
-bool out_esp_connected;
-int out_esp_command;
-float out_esp_value;
-int out_esp_target;
-
-float incoming_esp_speed;
-float incoming_esp_depth;
-float incoming_esp_stroke;
-float incoming_esp_sensation;
-float incoming_esp_pattern;
-bool incoming_esp_rstate;
-bool incoming_esp_connected;
-bool incoming_esp_heartbeat;
-int incoming_esp_target;
-
 
 String OSSM_IP = "0.0.0.0";
 int mdnsid = 0;
 String mdnstable;
+unsigned long  sendforheartbeat = 100;
+unsigned long nextsendtime= 0;
+bool sendnow = false;
 
-typedef struct struct_message {
-  float esp_speed;
-  float esp_depth;
-  float esp_stroke;
-  float esp_sensation;
-  float esp_pattern;
-  bool esp_rstate;
-  bool esp_connected;
-  bool esp_heartbeat;
-  int esp_command;
-  float esp_value;
-  int esp_target;
-} struct_message;
+WebSocketsClient webSocket; // websocket client class instance
+StaticJsonDocument<100> docws; // Allocate a static JSON document
 
 bool Ossm_paired = false;
-
-struct_message outgoingcontrol;
-struct_message incomingcontrol;
 
 #define HEARTBEAT_INTERVAL 5000/portTICK_PERIOD_MS	// 5 seconds
 
@@ -393,22 +364,53 @@ void connectbutton(lv_event_t * e)
 {
   int connectid = lv_roller_get_selected(ui_connect_roller);
   OSSM_IP = MDNS.IP(connectid).toString();
-  Serial.print(OSSM_IP);
+  LogDebug(OSSM_IP);
   HTTPClient http;
   String serverpath = "http://" + OSSM_IP + "/rest/environment";
   http.begin(serverpath.c_str());
   int httpResponseCode = http.GET();
   String payload = http.getString();
-  Serial.println(payload);
-  StaticJsonDocument<256> doc;
-  deserializeJson(doc, payload);
-  travel = doc["travel"];
-  rate_limit = doc["max_rate"];
-  pattern = doc["pattern"];
-  Serial.println(travel);
-  Serial.println(rate_limit);
-  Serial.println(patterns);
-  http.end();
+     // Check if http.GET() returns an error
+  if (httpResponseCode = HTTP_CODE_OK) {
+      LogDebug(http.errorToString(httpResponseCode));
+      LogDebug(payload);
+      http.end();
+      StaticJsonDocument<256> doc;
+      deserializeJson(doc, payload);
+      travel = doc["travel"];
+      JsonArray patternsarray = doc["patterns"];
+      String patterns;
+      for (int i = 0; i < patternsarray.size(); ++i) {
+        patterns = patterns + patternsarray[i].as<String>() + "\n";
+      }
+      Serial.println(patterns);
+      serverpath = "http://" + OSSM_IP + "/rest/safety";
+      http.begin(serverpath.c_str());
+      httpResponseCode = http.GET();
+      LogDebug(httpResponseCode);
+
+      payload = http.getString();
+      LogDebug(payload);
+      http.end();
+      deserializeJson(doc, payload);
+      depth_limit = doc["depth_limit"];
+      stroke_limit = doc["stroke_limit"];
+      rate_limit = doc["rate_limit"];
+      heartbeat_mode = doc["heartbeat_mode"];
+      ease_in_speed = doc["ease_in_speed"];
+      LogDebug(travel);
+      LogDebug(heartbeat_mode);
+      LogDebug(ease_in_speed);
+      LogDebug(travel);
+      LogDebug(rate_limit);
+      LogDebug(patterns);
+      webSocket.begin(OSSM_IP, 80, "/ws/control");
+      webSocket.setReconnectInterval(5000);
+      Ossm_paired = true;
+  } else {
+    LogDebug(http.errorToString(httpResponseCode));
+    http.end();
+  }
 }
 
 void savesettings(lv_event_t * e)
@@ -443,32 +445,45 @@ void savesettings(lv_event_t * e)
 
 void scanmdns(lv_event_t * e)
 {
-  Serial.println("Scanning for services");
+  LogDebug("Scanning for services");
   lv_obj_remove_flag(ui_connect_spinner, LV_OBJ_FLAG_HIDDEN);
-  mdnsid = MDNS.queryService(ServiceName, "tcp");
-    if (mdnsid == 0) {
-        Serial.println("no services found");
+  int timeout = 0;
+  while (mdnsid == 0 & timeout < 20) {
+    mdnsid = MDNS.queryService(ServiceName, "tcp");
+    timeout++;
+  }
+  if (mdnsid == 0) {
+        LogDebug("no services found");
         mdnstable = "no services found";
     } else {
         mdnstable = "";
-        Serial.print(mdnsid);
-        Serial.println(" service(s) found");
+        LogDebug(mdnsid);
+        LogDebug(" service(s) found");
         for (int i = 0; i < mdnsid; ++i) {
             // Print details for each service found
             String Hostname = MDNS.hostname(i).c_str();
             String IP = MDNS.IP(i).toString();
             mdnstable = mdnstable + " "+ Hostname + " " + IP + "\n";
-            Serial.print("  ");
-            Serial.print(i + 1);
-            Serial.print(": ");
-            Serial.print(MDNS.hostname(i));
-            Serial.print(" (");
-            Serial.print(MDNS.IP(i));
+            LogDebug("  ");
+            LogDebug(i + 1);
+            LogDebug(": ");
+            LogDebug(MDNS.hostname(i));
+            LogDebug(" (");
+            LogDebug(MDNS.IP(i));
         }
         const char* mdnstable_cstr = mdnstable.c_str();
         lv_obj_add_flag(ui_connect_spinner, LV_OBJ_FLAG_HIDDEN);
-        lv_roller_set_options(ui_connect_roller, mdnstable_cstr, LV_ROLLER_MODE_NORMAL);    
+        lv_roller_set_options(ui_connect_roller, mdnstable_cstr, LV_ROLLER_MODE_NORMAL); 
+        lv_obj_remove_state(ui_ConnectButtonR, LV_STATE_DISABLED);
    }
+}
+
+void sendws()
+{
+  if (Ossm_paired == true ) {
+      String jsonPayload = "{\"command\":\"" + String(command) + "\",\"depth\":\"" + String(depth) + "\",\"stroke\":\"" + String(stroke) + "\",\"rate\":\"" + String(rate) + "\",\"patterns\":\"" + String(pattern) + "\",\"vibration_override\":\"" + String(vibration_override) + "\",\"vibration_amplitude\":\"" + String(vibration_amplitude) + "\",\"vibration_frequency\":\"" + String(vibration_frequency) + "\"}";
+      webSocket.sendTXT(jsonPayload);
+  }
 }
 
 void screenmachine(lv_event_t * e)
@@ -480,7 +495,7 @@ void screenmachine(lv_event_t * e)
    } else if (lv_scr_act() == ui_Home){
     st_screens = ST_UI_HOME;
     rate = lv_slider_get_value(ui_homespeedslider);
-    speedenc =  fscale(0.5, rate_limit, 0, Encoder_MAP, rate, speedscale);
+    speedenc =  fscale(0, rate_limit, 0, Encoder_MAP, rate, 0);
     encoder1.setCount(speedenc); 
 
     depth = lv_slider_get_value(ui_homedepthslider);       
@@ -499,6 +514,8 @@ void screenmachine(lv_event_t * e)
     st_screens = ST_UI_MENUE;
   } else if (lv_scr_act() == ui_Pattern){
     st_screens = ST_UI_PATTERN;
+    const char* patterns_cstr = patterns.c_str();
+    lv_roller_set_options(ui_PatternS, patterns_cstr, LV_ROLLER_MODE_NORMAL);
   } else if (lv_scr_act() == ui_Torqe){
     st_screens = ST_UI_Torqe;
     torqe_f = lv_slider_get_value(ui_outtroqeslider);
@@ -531,17 +548,18 @@ void savepattern(lv_event_t * e){
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
   LogDebug(pattern);
-  float patterns = pattern;
+  sendws();
   //SendCommand(PATTERN, patterns, OSSM_ID);
 }
 
 void homebuttonmevent(lv_event_t * e){
   LogDebug("HomeButton");
-  if(OSSM_On == false){
-    //SendCommand(ON, 0.0, OSSM_ID);
-  } else if(OSSM_On == true){
-    //SendCommand(OFF, 0.0, OSSM_ID);
+  if(command == "STOP"){ 
+    command = "playpattern";
+  } else if(command != "STOP"){
+    command = "STOP";
   }
+  sendws();
 }
 
 void setupDepthInter(lv_event_t * e){
@@ -549,7 +567,7 @@ void setupDepthInter(lv_event_t * e){
 }
 
 void setupdepthF(lv_event_t * e){
-    //SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
+    command = "depth";
 }
 
 char string[16];
@@ -567,7 +585,6 @@ void setup(){
   ESP_LOGI("main", "Starting LightStateService");
   m5SettingsService.begin();
   ESP_LOGI("main", "Ready");
-  
 
   //M5.Axp.SetCHGCurrent(AXP192::BATTERY_CHARGE_CURRENT);
   //M5.Axp.SetLcdVoltage(3000);
@@ -685,6 +702,24 @@ void loop()
      Button1.tick();
      Button2.tick();
      Button3.tick();
+
+     webSocket.loop();
+
+     if(millis() >= nextsendtime){
+       sendws();
+       nextsendtime = millis() + sendforheartbeat;
+     }
+     
+
+     /*if(Ossm_paired == true){
+      if(sendnow == true){
+        Serial.print(OSSM_IP);
+        lastsendtime = millis();
+        sendnow = false;
+      }
+     };*/
+
+
     
      switch(st_screens){
       
@@ -744,12 +779,14 @@ void loop()
             speedenc = encoder1.getCount();
             rate = fscale(0, Encoder_MAP, 0, rate_limit, speedenc, speedscale);
             //SendCommand(SPEED, rate, OSSM_ID);
+            //sendws();
           }
         } else if(lv_slider_get_value(ui_homespeedslider) != rate){
             speedenc =  fscale(0.5, rate_limit, 0, Encoder_MAP, rate, speedscale);
             encoder1.setCount(speedenc);
             rate = lv_slider_get_value(ui_homespeedslider);
             //SendCommand(SPEED, rate, OSSM_ID);
+            //sendws();
         }
         char speed_v[7];
         dtostrf(rate, 6, 0, speed_v);
@@ -768,12 +805,14 @@ void loop()
             depthenc = encoder2.getCount();
             depth = fscale(0, Encoder_MAP, 0, depth_limit, depthenc, 0);
             //SendCommand(DEPTH, depth, OSSM_ID);
+            //sendws();
           }
         } else if(lv_slider_get_value(ui_homedepthslider) != depth){
             depthenc =  fscale(0, depth_limit, 0, Encoder_MAP, depth, 0);
             encoder2.setCount(depthenc);
             depth = lv_slider_get_value(ui_homedepthslider);
             //SendCommand(DEPTH, depth, OSSM_ID);
+            //sendws();
         }
         char depth_v[7];
         dtostrf(depth, 6, 0, depth_v);
@@ -792,12 +831,14 @@ void loop()
             strokeenc = encoder3.getCount();
             stroke = fscale(0, Encoder_MAP, 0, depth_limit, strokeenc, 0);
             //SendCommand(STROKE, stroke, OSSM_ID);
+            //sendws();
           }
         } else if(lv_slider_get_value(ui_homestrokeslider) != stroke){
             strokeenc =  fscale(0, depth_limit, 0, Encoder_MAP, stroke, 0);
             encoder3.setCount(strokeenc);
             stroke = lv_slider_get_value(ui_homestrokeslider);
            // SendCommand(STROKE, stroke, OSSM_ID);
+           //sendws();
         }
         char stroke_v[7];
         dtostrf(stroke, 6, 0, stroke_v);
@@ -815,12 +856,14 @@ void loop()
             sensationenc = encoder4.getCount();
             sensation = fscale((Encoder_MAP/2*-1), (Encoder_MAP/2), -100, 100, sensationenc, 0);
             //SendCommand(SENSATION, sensation, OSSM_ID);
+            //sendws();
           }
         } else if(lv_slider_get_value(ui_homesensationslider) != sensation){
             sensationenc =  fscale(-100, 100, (Encoder_MAP/2*-1), (Encoder_MAP/2), sensation, 0);
             encoder4.setCount(sensationenc);
             sensation = lv_slider_get_value(ui_homesensationslider);
             //SendCommand(SENSATION, sensation, OSSM_ID);
+            //sendws();
         }
 
         if(click2_short_waspressed == true){
@@ -903,12 +946,14 @@ void loop()
             torqe_f_enc = encoder1.getCount();
             torqe_f = fscale(0, Encoder_MAP, 50, 200, torqe_f_enc, 0);
             //SendCommand(TORQE_F, torqe_f, OSSM_ID);
+            sendws();
           }
         } else if(lv_slider_get_value(ui_outtroqeslider) != torqe_f){
             torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
             encoder1.setCount(torqe_f_enc);
             torqe_f = lv_slider_get_value(ui_outtroqeslider);
             //SendCommand(TORQE_F, torqe_f, OSSM_ID);
+            sendws();
         }
         char torqe_f_v[7];
         dtostrf((torqe_f*-1), 6, 0, torqe_f_v);
@@ -926,12 +971,14 @@ void loop()
             torqe_r_enc = encoder4.getCount();
             torqe_r = fscale(0, Encoder_MAP, 20, 200, torqe_r_enc, 0);
             //SendCommand(TORQE_R, torqe_r, OSSM_ID);
+            sendws();
           }
         } else if(lv_slider_get_value(ui_introqeslider) != torqe_r){
             torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
             encoder4.setCount(torqe_r_enc);
             torqe_r = lv_slider_get_value(ui_introqeslider);
             //SendCommand(TORQE_R, torqe_r, OSSM_ID);
+            sendws();
         }
         char torqe_r_v[7];
         dtostrf(torqe_r, 6, 0, torqe_r_v);
@@ -996,19 +1043,6 @@ void loop()
   delay(50);
 
 }
-
-/*void espNowRemoteTask(void *pvParameters)
-{
-  for(;;){
-    if(Ossm_paired){
-      outgoingcontrol.esp_command = HEARTBEAT;
-      outgoingcontrol.esp_heartbeat = true;
-      outgoingcontrol.esp_target = OSSM_ID;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-    }
-    vTaskDelay(HEARTBEAT_INTERVAL);
-  }
-}/*
 
 /*
 void cumscreentask(void *pvParameters)

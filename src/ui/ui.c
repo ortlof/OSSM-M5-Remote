@@ -239,6 +239,7 @@ void ui_event_ConnectButtonR(lv_event_t * e)
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
         connectbutton(e);
+        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
 
@@ -250,6 +251,9 @@ void ui_event_Home(lv_event_t * e)
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_SCREEN_LOADED) {
         screenmachine(e);
+        lv_slider_set_range(ui_homespeedslider, 0, rate_limit);
+        lv_slider_set_range(ui_homedepthslider, 0, depth_limit);
+        lv_slider_set_range(ui_homestrokeslider, 0, depth_limit);
     }
 }
 void ui_event_HomeButtonL(lv_event_t * e)

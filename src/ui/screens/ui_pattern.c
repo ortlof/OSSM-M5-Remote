@@ -210,9 +210,7 @@ void ui_Pattern_screen_init(void)
 // ui_PatternS
 
     ui_PatternS = lv_roller_create(ui_Pattern);
-    lv_roller_set_options(ui_PatternS,
-                          "SimpleStroke\nTeasingPounding\nRoboStroke\nHalfnHalf\nDeeper\nStopNGo\nInsist",
-                          LV_ROLLER_MODE_NORMAL);
+    lv_roller_set_options(ui_PatternS,"",LV_ROLLER_MODE_NORMAL);
 
     lv_obj_set_height(ui_PatternS, 119);
     lv_obj_set_width(ui_PatternS, lv_pct(95));

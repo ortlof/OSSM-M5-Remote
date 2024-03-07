@@ -123,6 +123,7 @@ void ui_Connect_screen_init(void)
     lv_obj_add_flag(ui_ConnectButtonR, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_ConnectButtonR, LV_OBJ_FLAG_SCROLLABLE);
 
+    lv_obj_add_state(ui_ConnectButtonR, LV_STATE_DISABLED);
     lv_obj_add_event_cb(ui_ConnectButtonR, ui_event_ConnectButtonR, LV_EVENT_ALL, NULL);
     lv_obj_set_style_bg_color(ui_ConnectButtonR, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_ConnectButtonR, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -205,7 +206,7 @@ void ui_Connect_screen_init(void)
 
     // ui_Connect_Spinner
 
-    ui_connect_spinner = lv_label_create(ui_Start);
+    ui_connect_spinner = lv_label_create(ui_Connect);
     lv_obj_set_width(ui_connect_spinner, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_connect_spinner, LV_SIZE_CONTENT);
     lv_obj_set_x(ui_connect_spinner, 0);
