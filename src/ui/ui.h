@@ -223,6 +223,7 @@ void setupDepthInter(lv_event_t * e);
 void setupdepthF(lv_event_t * e);
 void savepattern(lv_event_t * e);
 void savesettings(lv_event_t * e);
+void demo(lv_event_t * e);
 
 LV_IMG_DECLARE(image50x50);    // assets\logo.svg
 

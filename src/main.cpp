@@ -20,6 +20,7 @@
 #include "ArduinoJson.h"
 #include <PsychicHttpServer.h>
 #include <WebSocketsClient.h> // WebSocket Client Library for WebSocket
+#include <StreamString.h>
 
 #define LV_CONF_INCLUDE_SIMPLE
 #include <lvgl.h>
@@ -201,8 +202,8 @@ bool OSSM_On = false;
 
 // Tasks:
 
-//TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
-//void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
+TaskHandle_t wsRemote_t  = nullptr;  // Wsebsocket Remote task
+void wsRemoteTask(void *pvParameters); // Wsebsocket Remote task
 bool connectbtn(); //Handels Connectbtn
 int64_t touchmenue();
 void vibrate();
@@ -254,7 +255,6 @@ void my_touchpad_read(lv_indev_t * drv, lv_indev_data_t * data) {
   }
 }
 
-// LVGL code - Handle multiple events demo
 
 static void event_cb(lv_event_t *e)
 {
@@ -279,86 +279,6 @@ static void event_cb(lv_event_t *e)
     break;
   }
 }
-
-/*
-void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
-  memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
-
-  if(incomingcontrol.esp_target == M5_ID && Ossm_paired == false){
-
-    // Remove the existing peer (0xFF:0xFF:0xFF:0xFF:0xFF:0xFF)
-    esp_err_t result = esp_now_del_peer(peerInfo.peer_addr);
-
-    if (result == ESP_OK) {
-
-      memcpy(OSSM_Address, mac, 6); //get the mac address of the sender
-      
-      // Add the new peer
-      memcpy(peerInfo.peer_addr, OSSM_Address, 6);
-      if (esp_now_add_peer(&peerInfo) == ESP_OK) {
-        LogDebugFormatted("New peer added successfully, OSSM addresss : %02X:%02X:%02X:%02X:%02X:%02X\n", OSSM_Address[0], OSSM_Address[1], OSSM_Address[2], OSSM_Address[3], OSSM_Address[4], OSSM_Address[5]);
-        Ossm_paired = true;
-      }
-      else {
-        LogDebug("Failed to add new peer");
-      }
-    }
-    else {
-      LogDebug("Failed to remove peer");
-    }
-
-    speedlimit = incomingcontrol.esp_speed;
-    maxdepthinmm = incomingcontrol.esp_depth;
-    pattern = incomingcontrol.esp_pattern;
-    outgoingcontrol.esp_target = OSSM_ID;
-    
-    result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-    LogDebug(result);
-    
-    if (result == ESP_OK) {
-      Ossm_paired = true;
-      //lv_label_set_text(ui_connect, "Connected");
-      //lv_screen_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
-    }
-  }
-  switch(incomingcontrol.esp_command)
-    {
-    case OFF: 
-    {
-    lv_obj_clear_state(ui_HomeButtonM, LV_STATE_CHECKED);
-    OSSM_On = false;
-    }
-    break;
-    case ON:
-    {
-    lv_obj_add_state(ui_HomeButtonM, LV_STATE_CHECKED);
-    OSSM_On = true;
-    }
-    break;
-    }
-}
-*/
-
-/*bool SendCommand(int Command, float Value, int Target){
-  
-  if(Ossm_paired == true){
-
-    outgoingcontrol.esp_connected = true;
-    outgoingcontrol.esp_command = Command;
-    outgoingcontrol.esp_value = Value;
-    outgoingcontrol.esp_target = Target;
-    esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-  
-    if (result == ESP_OK) {
-      return true;
-    } 
-    else {
-      delay(20);
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      return false;
-    }
-  }
-}*/
 
 void connectbutton(lv_event_t * e)
 {
@@ -407,6 +327,7 @@ void connectbutton(lv_event_t * e)
       webSocket.begin(OSSM_IP, 80, "/ws/control");
       webSocket.setReconnectInterval(5000);
       Ossm_paired = true;
+      vTaskResume(wsRemote_t);
   } else {
     LogDebug(http.errorToString(httpResponseCode));
     http.end();
@@ -480,10 +401,25 @@ void scanmdns(lv_event_t * e)
 
 void sendws()
 {
-  if (Ossm_paired == true ) {
-      String jsonPayload = "{\"command\":\"" + String(command) + "\",\"depth\":\"" + String(depth) + "\",\"stroke\":\"" + String(stroke) + "\",\"rate\":\"" + String(rate) + "\",\"patterns\":\"" + String(pattern) + "\",\"vibration_override\":\"" + String(vibration_override) + "\",\"vibration_amplitude\":\"" + String(vibration_amplitude) + "\",\"vibration_frequency\":\"" + String(vibration_frequency) + "\"}";
-      webSocket.sendTXT(jsonPayload);
+  StreamString data;
+
+}
+
+void wsRemoteTask(void *pvParameters){
+  for(;;){
+      if (Ossm_paired == true ) {     
+       if(millis() >= nextsendtime){
+       String jsonPayload = "{\"command\":\"" + String(command) + "\",\"depth\":\"" + String(depth) + "\",\"stroke\":\"" + String(stroke) + "\",\"rate\":\"" + String(rate) + "\",\"patterns\":\"" + String(pattern) + "\",\"vibration_override\":\"" + String(vibration_override) + "\",\"vibration_amplitude\":\"" + String(vibration_amplitude) + "\",\"vibration_frequency\":\"" + String(vibration_frequency) + "\"}";
+       webSocket.sendTXT(jsonPayload);
+       nextsendtime = millis() + sendforheartbeat;
+     }
+     }
   }
+}
+
+void demo(lv_event_t * e){
+  rate_limit = 200;
+  depth_limit = 140;
 }
 
 void screenmachine(lv_event_t * e)
@@ -590,16 +526,16 @@ void setup(){
   //M5.Axp.SetLcdVoltage(3000);
   LogDebug("\n Starting");      // Start LogDebug 
 
-  //xTaskCreatePinnedToCore(espNowRemoteTask,      /* Task function. */
-  //                          "espNowRemoteTask",  /* name of task. */
-  //                          4096,               /* Stack size of task */
-  //                          NULL,               /* parameter of the task */
-  //                          5,                  /* priority of the task */
-  //                          &eRemote_t,         /* Task handle to keep track of created task */
-  //                          0);                 /* pin task to core 0 */
+  xTaskCreatePinnedToCore(wsRemoteTask,      /* Task function. */
+                            "WebSocketConnection",  /* name of task. */
+                            4096,               /* Stack size of task */
+                            NULL,               /* parameter of the task */
+                            5,                  /* priority of the task */
+                            &wsRemote_t,         /* Task handle to keep track of created task */
+                            0);                 /* pin task to core 0 */
 
-  //delay(200);
-  //vTaskSuspend(eRemote_t);
+  delay(200);
+  vTaskSuspend(wsRemote_t);
   
   
   encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
@@ -610,6 +546,8 @@ void setup(){
   Button1.attachLongPressStop(mxlong);
   Button2.attachClick(click2);
   Button3.attachClick(click3);
+  Button3.setDebounceMs(20);
+
 
   m5SettingsService.read([&](M5Settings &settings) {
     dark_mode = settings.darkmode;
@@ -625,7 +563,7 @@ void setup(){
   { /// Landscape mode.
   M5.Display.setRotation(M5.Display.getRotation() ^ 1);
   }
-
+  
   lv_init();
   lv_tick_set_cb(my_tick_function);
 
@@ -668,7 +606,6 @@ void setup(){
 
 void loop()
 {
-     
      const int BatteryLevel = M5.Power.Axp192.getBatteryLevel();
      String BatteryValue = (String(BatteryLevel, DEC) + "%");
      const char *battVal = BatteryValue.c_str();
@@ -704,11 +641,6 @@ void loop()
      Button3.tick();
 
      webSocket.loop();
-
-     if(millis() >= nextsendtime){
-       sendws();
-       nextsendtime = millis() + sendforheartbeat;
-     }
      
 
      /*if(Ossm_paired == true){
@@ -1040,7 +972,6 @@ void loop()
      click2_short_waspressed = false;
      click3_short_waspressed = false;
   
-  delay(50);
 
 }
 
@@ -1106,19 +1037,23 @@ void vibrate(){
 void mxclick() {
   vibrate();
   mxclick_short_waspressed = true;
+  LogDebug("mxclick");
 } 
 
 void mxlong(){
   vibrate();
   mxclick_long_waspressed = true;
+  LogDebug("mxlong");
 } 
 
 void click2() {
   vibrate();
   click2_short_waspressed = true;
+  LogDebug("click2");
 } // click1
 
 void click3() {
   vibrate();
   click3_short_waspressed = true;
+  LogDebug("click3");
 } // click1
