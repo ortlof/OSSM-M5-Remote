@@ -4,12 +4,14 @@ import type { LayoutLoad } from './$types';
 export const prerender = false;
 export const ssr = false;
 
-export const load = (async () => {
+export const load = (async ({ fetch }) => {
 	const result = await fetch('/rest/features');
 	const item = await result.json();
 	return {
 		features: item,
 		title: 'ESP32-SvelteKit',
-		github: 'theelims/ESP32-sveltekit'
+		github: 'theelims/ESP32-sveltekit',
+		copyright: '2024 theelims',
+		appName: 'ESP32 SvelteKit'
 	};
 }) satisfies LayoutLoad;

@@ -74,8 +74,22 @@ An "originId" is passed to the update handler which may be used to identify the 
 | Origin                     | Description                                     |
 | -------------------------- | ----------------------------------------------- |
 | http                       | An update sent over REST (HttpEndpoint)         |
-| mqtt                       | An update sent over MQTT (MqttPubSub)           |
+| mqtt                       | An update sent over MQTT (MqttEndpoint)         |
 | websocketserver:{clientId} | An update sent over WebSocket (WebSocketServer) |
+
+Sometimes if can be desired to hook into every update of an state, even if the StateUpdateResult is `StateUpdateResult::UNCHANGED` and the update handler isn't called. In such cases you can use the hook handler. Similarly it can be removed later.
+
+```cpp
+// register an update handler
+hook_handler_id_t myHookHandler = lightStateService.addHookHandler(
+  [&](const String& originId, StateUpdateResult &result) {
+    Serial.printf("The light's state has been updated by: %s with result %d\n", originId, result);
+  }
+);
+
+// remove the update handler
+lightStateService.removeHookHandler(myHookHandler);
+```
 
 StatefulService exposes a read function which you may use to safely read the state. This function takes care of protecting against parallel access to the state in multi-core environments such as the ESP32.
 
@@ -197,7 +211,7 @@ class LightStateService : public StatefulService<LightState> {
 
 ### WebSockets
 
-[WebSocketTxRx.h](https://github.com/theelims/ESP32-sveltekit/blob/main/lib/framework/WebSocketTxRx.h) allows you to read and update state over a WebSocket connection. WebSocketTxRx automatically pushes changes to all connected clients when state is updated.
+[WebSocketServer.h](https://github.com/theelims/ESP32-sveltekit/blob/main/lib/framework/WebSocketServer.h) allows you to read and update state over a WebSocket connection. WebSocketServer automatically pushes changes to all connected clients when state is updated.
 
 The code below demonstrates how to extend the LightStateService class to provide an WebSocket:
 
@@ -225,7 +239,7 @@ To register the WS endpoint with the web server the function `_webSocketServer.b
 
 The framework includes an MQTT client which can be configured via the UI. MQTT requirements will differ from project to project so the framework exposes the client for you to use as you see fit. The framework does however provide a utility to interface StatefulService to a pair of pub/sub (state/set) topics. This utility can be used to synchronize state with software such as Home Assistant.
 
-[MqttPubSub.h](https://github.com/theelims/ESP32-sveltekit/blob/main/lib/framework/MqttPubSub.h) allows you to publish and subscribe to synchronize state over a pair of MQTT topics. MqttPubSub automatically pushes changes to the "pub" topic and reads updates from the "sub" topic.
+[MqttEndpoint.h](https://github.com/theelims/ESP32-sveltekit/blob/main/lib/framework/MqttEndpoint.h) allows you to publish and subscribe to synchronize state over a pair of MQTT topics. MqttEndpoint automatically pushes changes to the "pub" topic and reads updates from the "sub" topic.
 
 The code below demonstrates how to extend the LightStateService class to interface with MQTT:
 
@@ -234,7 +248,7 @@ The code below demonstrates how to extend the LightStateService class to interfa
 class LightStateService : public StatefulService<LightState> {
  public:
   LightStateService(AsyncMqttClient* mqttClient) :
-      _mqttPubSub(LightState::read,
+      _mqttEndpoint(LightState::read,
                   LightState::update,
                   this,
                   mqttClient,
@@ -243,14 +257,14 @@ class LightStateService : public StatefulService<LightState> {
   }
 
  private:
-  MqttPubSub<LightState> _mqttPubSub;
+  MqttEndpoint<LightState> _mqttEndpoint;
 };
 ```
 
 You can re-configure the pub/sub topics at runtime as required:
 
 ```cpp
-_mqttPubSub.configureBroker("homeassistant/light/desk_lamp/set", "homeassistant/light/desk_lamp/state");
+_mqttEndpoint.configureBroker("homeassistant/light/desk_lamp/set", "homeassistant/light/desk_lamp/state");
 ```
 
 The demo project allows the user to modify the MQTT topics via the UI so they can be changed without re-flashing the firmware.
@@ -320,7 +334,7 @@ The framework supplies access to various features via getter functions:
 | getSleepService()            | Send the ESP32 into deep sleep                     |
 | getBatteryService()          | Update battery information on the client           |
 
-The core features use the [StatefulService.h](https://github.com/theelims/ESP32-sveltekit/blob/main/lib/framework/StatefulService.h) class and can therefore you can change settings or observe changes to settings through the read/update API.
+The core features use the [StatefulService.h](https://github.com/theelims/ESP32-sveltekit/blob/main/lib/framework/StatefulService.h) class and therefore you can change settings or observe changes to settings through the read/update API.
 
 Inspect the current WiFi settings:
 

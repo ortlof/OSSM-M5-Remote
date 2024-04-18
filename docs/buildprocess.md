@@ -2,6 +2,10 @@
 
 The build process is controlled by [platformio.ini](https://github.com/theelims/ESP32-sveltekit/platformio.ini) and automates the build of the front end website with Vite as well as the binary compilation for the ESP32 firmware. Whenever PlatformIO is building a new binary it will call the python script [build_interface.py](https://github.com/theelims/ESP32-sveltekit/scripts/build_interface.py) to action. It will check the frontend files for changes. If necessary it will start the Vite build and gzip the resulting files either to the `data/` directory or embed them into a header file. In case the WWW files go into a LITTLEFS partition a file system image for the flash is created for the default build environment and upload to the ESP32.
 
+## Changing the JS package manager
+
+This project uses NPM as the default package manager. However, many users might have different preferences and like to use YARN or PNPM instead. Just switch the interface to one of the other package managers. The build script identify the package manager by the presence of its lock-file and start the vite build process accordingly.
+
 ## Serving from Flash or Embedding into the Binary
 
 The front end website can be served either from the LITTLEFS partition of the flash, or embedded into the firmware binary (default). Later has the advantage that only one binary needs to be distributed easing the OTA process. Further more this is desirable if you like to preserve the settings stored in the LITTLEFS partition, or have other files there that need to survive a firmware update. To serve from the LITTLEFS partition instead please comment the following build flag out:
@@ -122,20 +126,10 @@ The ESP32 Arduino Core and many other libraries use the ESP Logging tools. To en
 ```ini
 build_flags =
 ...
-	-DCORE_DEBUG_LEVEL=5
+	-D CORE_DEBUG_LEVEL=5
 ```
 
 It accepts values from 5 (Verbose) to 1 (Errors) for different information depths to be logged on the serial terminal. If commented out there won't be debug messages from the core libraries. For a production build you should comment this out.
-
-### Serve Config Files
-
-By enabling this build flag the ESP32 will serve all config files stored on the LittleFS flash partition under `http:\\[IP]\config\[filename].json`. This can be helpful to troubleshoot problems. However, it is strongly advised to disable this for production builds.
-
-```ini
-build_flags =
-...
-  -D SERVE_CONFIG_FILES
-```
 
 ### Serve Config Files
 
@@ -162,7 +156,7 @@ The script will download a public certificate store from Mozilla (`board_ssl_cer
 
 !!! info
 
-        To enable SSL the feature `FT_NTP=1` must be enabled as well.
+     To enable SSL the feature `FT_NTP=1` must be enabled as well.
 
 ## Vite and LittleFS 32 Character Limit
 

@@ -14,10 +14,12 @@
 
 #include <NTPSettingsService.h>
 
-NTPSettingsService::NTPSettingsService(PsychicHttpServer *server, FS *fs, SecurityManager *securityManager) : _server(server),
-                                                                                                              _securityManager(securityManager),
-                                                                                                              _httpEndpoint(NTPSettings::read, NTPSettings::update, this, server, NTP_SETTINGS_SERVICE_PATH, securityManager),
-                                                                                                              _fsPersistence(NTPSettings::read, NTPSettings::update, this, fs, NTP_SETTINGS_FILE)
+NTPSettingsService::NTPSettingsService(PsychicHttpServer *server,
+                                       FS *fs,
+                                       SecurityManager *securityManager) : _server(server),
+                                                                           _securityManager(securityManager),
+                                                                           _httpEndpoint(NTPSettings::read, NTPSettings::update, this, server, NTP_SETTINGS_SERVICE_PATH, securityManager),
+                                                                           _fsPersistence(NTPSettings::read, NTPSettings::update, this, fs, NTP_SETTINGS_FILE)
 {
     addUpdateHandler([&](const String &originId)
                      { configureNTP(); },
@@ -47,13 +49,17 @@ void NTPSettingsService::begin()
 
 void NTPSettingsService::onStationModeGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 {
+#ifdef SERIAL_INFO
     Serial.println(F("Got IP address, starting NTP Synchronization"));
+#endif
     configureNTP();
 }
 
 void NTPSettingsService::onStationModeDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
 {
+#ifdef SERIAL_INFO
     Serial.println(F("WiFi connection dropped, stopping NTP."));
+#endif
     configureNTP();
 }
 
@@ -61,7 +67,9 @@ void NTPSettingsService::configureNTP()
 {
     if (WiFi.isConnected() && _state.enabled)
     {
+#ifdef SERIAL_INFO
         Serial.println(F("Starting NTP..."));
+#endif
         configTzTime(_state.tzFormat.c_str(), _state.server.c_str());
     }
     else
