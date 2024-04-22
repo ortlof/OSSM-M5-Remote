@@ -17,7 +17,7 @@ lv_obj_t * ui_StartButtonM;
 lv_obj_t * ui_StartButtonMText;
 lv_obj_t * ui_StartButtonR;
 lv_obj_t * ui_StartButtonRText;
-lv_obj_t * ui_KMLogo;
+lv_obj_t * ui_LOVE_Logo;
 lv_obj_t * ui_OrtlofLogo;
 lv_obj_t * ui_Welcome;
 lv_obj_t * ui_Batt;
@@ -551,37 +551,21 @@ void ui_Start_screen_init(void)
     lv_obj_set_style_text_color(ui_StartButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_StartButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // ui_KMLogo
+    // ui_LOVE_Logo
 
-    ui_KMLogo = lv_img_create(ui_Start);
-    lv_img_set_src(ui_KMLogo, &ui_img_km__png);
+    ui_LOVE_Logo = lv_img_create(ui_Start);
+    lv_img_set_src(ui_LOVE_Logo, &image50x50);
 
-    lv_obj_set_width(ui_KMLogo, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_KMLogo, LV_SIZE_CONTENT);
+    lv_obj_set_width(ui_LOVE_Logo, 100);    lv_obj_set_height(ui_LOVE_Logo, 100);
 
-    lv_obj_set_x(ui_KMLogo, -80);
-    lv_obj_set_y(ui_KMLogo, 0);
+    lv_obj_set_x(ui_LOVE_Logo, 0);
+    lv_obj_set_y(ui_LOVE_Logo, 10);
 
-    lv_obj_set_align(ui_KMLogo, LV_ALIGN_CENTER);
+    lv_obj_set_align(ui_LOVE_Logo, LV_ALIGN_CENTER);
 
-    lv_obj_add_flag(ui_KMLogo, LV_OBJ_FLAG_ADV_HITTEST);
-    lv_obj_clear_flag(ui_KMLogo, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(ui_LOVE_Logo, LV_OBJ_FLAG_ADV_HITTEST);
+    lv_obj_clear_flag(ui_LOVE_Logo, LV_OBJ_FLAG_SCROLLABLE);
 
-    // ui_OrtlofLogo
-
-    ui_OrtlofLogo = lv_img_create(ui_Start);
-    lv_img_set_src(ui_OrtlofLogo, &ui_img_ortlodof_png);
-
-    lv_obj_set_width(ui_OrtlofLogo, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_OrtlofLogo, LV_SIZE_CONTENT);
-
-    lv_obj_set_x(ui_OrtlofLogo, 80);
-    lv_obj_set_y(ui_OrtlofLogo, 0);
-
-    lv_obj_set_align(ui_OrtlofLogo, LV_ALIGN_CENTER);
-
-    lv_obj_add_flag(ui_OrtlofLogo, LV_OBJ_FLAG_ADV_HITTEST);
-    lv_obj_clear_flag(ui_OrtlofLogo, LV_OBJ_FLAG_SCROLLABLE);
 
     // ui_Welcome
 
@@ -1014,7 +998,7 @@ void ui_Home_screen_init(void)
     lv_obj_set_align(ui_BattValue2, LV_ALIGN_RIGHT_MID);
 
     lv_label_set_text(ui_BattValue2, T_BLANK);
-    lv_label_set_recolor(ui_BattValue2, "true");
+
 
     // ui_Battery2
 
@@ -1247,7 +1231,6 @@ void ui_Menue_screen_init(void)
     lv_obj_set_align(ui_BattValue3, LV_ALIGN_RIGHT_MID);
 
     lv_label_set_text(ui_BattValue3, T_BLANK);
-    lv_label_set_recolor(ui_BattValue3, "true");
 
     // ui_Battery3
 
@@ -1630,7 +1613,6 @@ void ui_Pattern_screen_init(void)
     lv_obj_set_align(ui_BattValue5, LV_ALIGN_RIGHT_MID);
 
     lv_label_set_text(ui_BattValue5, T_BLANK);
-    lv_label_set_recolor(ui_BattValue5, "true");
 
     // ui_Battery5
 
@@ -2035,7 +2017,6 @@ void ui_Torqe_screen_init(void)
     lv_obj_set_align(ui_BattValue4, LV_ALIGN_RIGHT_MID);
 
     lv_label_set_text(ui_BattValue4, T_BLANK);
-    lv_label_set_recolor(ui_BattValue4, "true");
 
     // ui_Battery4
 
@@ -2223,7 +2204,7 @@ void ui_EJECTSettings_screen_init(void)
     lv_obj_set_align(ui_BattValue6, LV_ALIGN_RIGHT_MID);
 
     lv_label_set_text(ui_BattValue6, T_BLANK);
-    lv_label_set_recolor(ui_BattValue6, "true");
+
 
     // ui_Battery6
 
@@ -2411,7 +2392,6 @@ void ui_Settings_screen_init(void)
     lv_obj_set_align(ui_BattValue1, LV_ALIGN_RIGHT_MID);
 
     lv_label_set_text(ui_BattValue1, T_BLANK);
-    lv_label_set_recolor(ui_BattValue1, "true");
 
     // ui_Battery1
 
