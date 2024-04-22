@@ -24,7 +24,7 @@ extern lv_obj_t * ui_StartButtonM;
 extern lv_obj_t * ui_StartButtonMText;
 extern lv_obj_t * ui_StartButtonR;
 extern lv_obj_t * ui_StartButtonRText;
-extern lv_obj_t * ui_KMLogo;
+extern lv_obj_t * ui_LOVE_Logo;
 extern lv_obj_t * ui_OrtlofLogo;
 extern lv_obj_t * ui_Welcome;
 extern lv_obj_t * ui_Batt;
@@ -155,11 +155,7 @@ void screenmachine(lv_event_t * e);
 void screenmachine(lv_event_t * e);
 void savesettings(lv_event_t * e);
 
-LV_IMG_DECLARE(ui_img_km__png);    // assets\km..png
-LV_IMG_DECLARE(ui_img_ortlodof_png);    // assets\ortlodof.png
-
-
-
+LV_IMG_DECLARE(image50x50);    // assets\logo.svg
 
 void ui_init(void);
 
