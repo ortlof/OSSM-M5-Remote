@@ -19,7 +19,10 @@ Supported in this version of the M5 remote:
 
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
 
+## Not Supported sex toys in this version
+
 | EJECT | https://github.com/ortlof/EJECT-cum-tube-project | [A Work in Progress]
+
 
 
 
@@ -27,7 +30,7 @@ Supported in this version of the M5 remote:
 
 ## Bill Of Materials for sourcing Electrical Components
 
-**!! IMPORTANT!:** Only the M5 Stack CORE2 works with the OSSM M5 Remote PCB !!
+**!! IMPORTANT!:** Only the M5 Stack CORE2 works (incl V1.1) with the OSSM M5 Remote PCB !!
 
 BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
@@ -68,13 +71,12 @@ Filament - A good quality PLA works well. While there are no threads it is recom
 __Note:__
 If you are one of the very small number of Version 1 PCB users, you will need to change your version to V1 in the config.h. The current version in GitHub is V2.
 
-# [Assembly instructions](Assembly.md)
+# [Assembly instructions Klick Here !](Assembly.md)
 
 ## Operation, or...how do I use it?
 
 1. Power on the OSSM and let it home.
 2. Power on the OSSM M5 Remote.
 3. Press the left encoder to select 'Connect'
-4. It will connect to the OSSM and it will perform another home operation.
-5. You can verify it is connected by looking in the top left corner, it should say 'connected'.
-6. You can now begin use. You'll need to set the speed, depth and stroke to more than 0 and press the middle key to start. Start the speed out slow. 
+4. You can verify it is connected by looking in the top left corner, it should say 'connected'.
+5. You can now begin use. You'll need to set the speed, depth and stroke to more than 0 and press the middle key to start. Start the speed out slow. 
