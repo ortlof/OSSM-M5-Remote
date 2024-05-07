@@ -7,6 +7,8 @@ A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the [O
 
 Intially developed for the OSSM Project: 
 https://github.com/KinkyMakers/OSSM-hardware
+
+# [Assembly instructions Klick Here !](Assembly.md)
  
 
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
@@ -70,8 +72,6 @@ Filament - A good quality PLA works well. While there are no threads it is recom
 
 __Note:__
 If you are one of the very small number of Version 1 PCB users, you will need to change your version to V1 in the config.h. The current version in GitHub is V2.
-
-# [Assembly instructions Klick Here !](Assembly.md)
 
 ## Operation, or...how do I use it?
 
