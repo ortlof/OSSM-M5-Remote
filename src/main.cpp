@@ -488,7 +488,7 @@ void setup(){
   M5.begin(cfg);
   EEPROM.begin(EEPROM_SIZE);
 
-  M5.Power.Axp192.setChargeCurrent(BATTERY_CHARGE_CURRENT);
+  M5.Power.setChargeCurrent(BATTERY_CHARGE_CURRENT);
   LogDebug("\n Starting");      // Start LogDebug 
 
   WiFi.mode(WIFI_STA);
@@ -582,7 +582,7 @@ void setup(){
 
 void loop()
 {
-     const int BatteryLevel = M5.Power.Axp192.getBatteryLevel();
+     const int BatteryLevel = M5.Power.getBatteryLevel();
      String BatteryValue = (String(BatteryLevel, DEC) + "%");
      const char *battVal = BatteryValue.c_str();
      lv_bar_set_value(ui_Battery, BatteryLevel, LV_ANIM_OFF);
