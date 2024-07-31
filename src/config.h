@@ -7,49 +7,7 @@ uint8_t CUM_Address[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 #define OSSM_ID  1 //OSSM_ID Default can be changed with M5 Remote in the Future will be Saved in EPROOM
 #define M5_ID 99 //M5_ID Default can be changed with M5 Remote in the Future will be Saved in EPROOM
-#define BATTERY_CHARGE_CURRENT 100  // Charge current, must be one of AXP192::CHGCurrent
-
-#ifdef ARDUINO_M5STACK_CORE2
-
-#define V2  //Define V1 or V2 PCB Version
-
-//Pin Definitons Encoders V1:
-#ifdef V1
-#define ENC_1_CLK 25
-#define ENC_1_DT 26
-
-#define ENC_2_CLK 13
-#define ENC_2_DT 14
-
-#define ENC_3_CLK 33
-#define ENC_3_DT 32
-
-#define ENC_4_CLK 19
-#define ENC_4_DT 27
-OneButton Button1(35, false);
-OneButton Button2(18, false);
-OneButton Button3(38, false);
-#endif
-
-//Pin Definitons Encoders V2:
-
-#ifdef V2
-#define ENC_1_CLK 25
-#define ENC_1_DT 26
-
-#define ENC_2_CLK 13
-#define ENC_2_DT 14
-
-#define ENC_3_CLK 33
-#define ENC_3_DT 32
-
-#define ENC_4_CLK 19
-#define ENC_4_DT 27
-OneButton Button1(35, false); //MX Button
-OneButton Button2(36, false); //Encoder Left
-OneButton Button3(34, false, true); //Encoder Right
-#endif
-#endif
+#define BATTERY_CHARGE_CURRENT 100 // Charge current, must be one of AXP192::CHGCurrent
 
 #ifdef ARDUINO_M5STACK_CORES3
 //Pin Definitons Encoders S3:
@@ -68,7 +26,25 @@ OneButton Button3(34, false, true); //Encoder Right
 OneButton Button1(10, false); // MX Button
 OneButton Button2(8, false); // Encoder Left
 OneButton Button3(14, false, true); // Encoder Right
+#else
+
+#define ENC_1_CLK 25
+#define ENC_1_DT 26
+
+#define ENC_2_CLK 13
+#define ENC_2_DT 14
+
+#define ENC_3_CLK 33
+#define ENC_3_DT 32
+
+#define ENC_4_CLK 19
+#define ENC_4_DT 27
+OneButton Button1(35, false); //MX Button
+OneButton Button2(36, false); //Encoder Left
+OneButton Button3(34, false, true); //Encoder Right
 #endif
+
+
 
 #define Encoder_MAP 144
 

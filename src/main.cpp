@@ -135,7 +135,7 @@ long encoder4_enc = 0;
 
 extern float maxdepthinmm = 400.0;
 extern float speedlimit = 600;
-int speedscale = 0;
+int speedscale = -5;
 
 float speed = 0.0;
 float depth = 0.0;
@@ -314,9 +314,16 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       LogDebug("Failed to remove peer");
     }
 
-    speedlimit = incomingcontrol.esp_speed;
+    
+    if(incomingcontrol.esp_speed > speedlimit){
+      speedlimit = 600;
+    } else (
+    speedlimit = incomingcontrol.esp_speed);
+    LogDebug(speedlimit);
     maxdepthinmm = incomingcontrol.esp_depth;
+    LogDebug(maxdepthinmm);
     pattern = incomingcontrol.esp_pattern;
+    LogDebug(pattern);
     outgoingcontrol.esp_target = OSSM_ID;
     
     result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
@@ -332,13 +339,11 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     {
     case OFF: 
     {
-    lv_obj_clear_state(ui_HomeButtonM, LV_STATE_CHECKED);
     OSSM_On = false;
     }
     break;
     case ON:
     {
-    lv_obj_add_state(ui_HomeButtonM, LV_STATE_CHECKED);
     OSSM_On = true;
     }
     break;
@@ -411,13 +416,18 @@ void screenmachine(lv_event_t * e)
   } else if (lv_scr_act() == ui_Home){
     st_screens = ST_UI_HOME;
     speed = lv_slider_get_value(ui_homespeedslider);
-    speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, speedscale);
+    LogDebug(speedenc);
+    LogDebug(speed);
+    speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
     encoder1.setCount(speedenc); 
+    LogDebug(speedenc);
 
+    lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
     depth = lv_slider_get_value(ui_homedepthslider);       
     depthenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, depth, 0);
     encoder2.setCount(depthenc);
-            
+
+    lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);        
     stroke = lv_slider_get_value(ui_homestrokeslider);    
     strokeenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, stroke, 0);
     encoder3.setCount(strokeenc);
@@ -633,11 +643,11 @@ void loop()
               encoder1.setCount(Encoder_MAP);
             } 
             speedenc = encoder1.getCount();
-            speed = fscale(0, Encoder_MAP, 0, speedlimit, speedenc, speedscale);
+            speed = fscale(0.5, Encoder_MAP, 0, speedlimit, speedenc, 0);
             SendCommand(SPEED, speed, OSSM_ID);
           }
         } else if(lv_slider_get_value(ui_homespeedslider) != speed){
-            speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, speedscale);
+            speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
             encoder1.setCount(speedenc);
             speed = lv_slider_get_value(ui_homespeedslider);
             SendCommand(SPEED, speed, OSSM_ID);
