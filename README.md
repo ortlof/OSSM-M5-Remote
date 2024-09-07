@@ -32,7 +32,7 @@ Supported in this version of the M5 remote:
 
 ## Bill Of Materials for sourcing Electrical Components
 
-**!! IMPORTANT!:** Only the M5 Stack CORE2 works (incl V1.1) with the OSSM M5 Remote PCB !!
+All Stacks are supported Now.
 
 BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
