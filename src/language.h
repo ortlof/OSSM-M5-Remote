@@ -48,9 +48,9 @@
 #define T_JackHammer        "Jack Hammer"
 #define T_StrokeNibbler     "Stroke Nibbler"
 
-#define T_CUM_SPEED         "CUM Speed"
-#define T_CUM_TIME          "CUM Time"
-#define T_CUM_Volume        "CUM Volume"
-#define T_CUM_Accel         "CUM Force"
+#define T_CUM_SPEED         "Speed"
+#define T_CUM_TIME          "Time"
+#define T_CUM_Volume        "Volume"
+#define T_CUM_Accel         "Force"
 
 #define T_FUCKS_MIN         " F/m"

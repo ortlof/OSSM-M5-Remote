@@ -103,6 +103,9 @@ bool touch_disabled = false;
 #define CUMTIME 21
 #define CUMSIZE   22
 #define CUMACCEL  23
+//MARCO
+#define CUMON   24
+#define CUMOFF  25
 
 #define CONNECT 88
 #define HEARTBEAT 99
@@ -166,6 +169,7 @@ bool out_esp_connected;
 int out_esp_command;
 float out_esp_value;
 int out_esp_target;
+int out_esp_source;
 
 float incoming_esp_speed;
 float incoming_esp_depth;
@@ -176,6 +180,8 @@ bool incoming_esp_rstate;
 bool incoming_esp_connected;
 bool incoming_esp_heartbeat;
 int incoming_esp_target;
+int incoming_esp_source;
+
 
 typedef struct struct_message {
   float esp_speed;
@@ -189,15 +195,18 @@ typedef struct struct_message {
   int esp_command;
   float esp_value;
   int esp_target;
+  int esp_source;
 } struct_message;
 
 bool Ossm_paired = false;
+bool Eject_paired = false;
 
 struct_message outgoingcontrol;
 struct_message incomingcontrol;
 
 esp_now_peer_info_t peerInfo;
 uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast to all ESP32s, upon connection gets updated to the actual address
+uint8_t EJECT_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast to all ESP32s, upon connection gets updated to the actual address
 
 #define HEARTBEAT_INTERVAL 5000/portTICK_PERIOD_MS	// 5 seconds
 
@@ -211,8 +220,13 @@ bool OSSM_On = false;
 // Tasks:
 
 TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
+TaskHandle_t eCUMRemote_t  = nullptr;  // Esp Now Remote Task
 
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
+//MARCO
+void cumscreentask(void *pvParameters);  //Handles Cumpump
+
+
 bool connectbtn(); //Handels Connectbtn
 int64_t touchmenue();
 void vibrate();
@@ -222,8 +236,12 @@ void mxlong();
 bool mxclick_long_waspressed = false;
 void click2();
 bool click2_short_waspressed = false;
+void click2long();
+bool click2_long_waspressed = false;
 void click3();
 bool click3_short_waspressed = false;
+void click3long();
+bool click3_long_waspressed = false;
 
 lv_display_t *display;
 lv_indev_t *indev;
@@ -291,7 +309,7 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
 
-  if(incomingcontrol.esp_target == M5_ID && Ossm_paired == false){
+  if(incomingcontrol.esp_target == M5_ID && Ossm_paired == false && incomingcontrol.esp_source == OSSM_ID){
 
     // Remove the existing peer (0xFF:0xFF:0xFF:0xFF:0xFF:0xFF)
     esp_err_t result = esp_now_del_peer(peerInfo.peer_addr);
@@ -334,8 +352,42 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       lv_label_set_text(ui_connect, "Connected");
       lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
+  } else if(incomingcontrol.esp_target == M5_ID && Eject_paired == false && incomingcontrol.esp_source == EJECT_ID){
+
+    // Remove the existing peer (0xFF:0xFF:0xFF:0xFF:0xFF:0xFF)
+    esp_err_t result = esp_now_del_peer(peerInfo.peer_addr);
+
+    if (result == ESP_OK) {
+
+      memcpy(EJECT_Address, mac, 6); //get the mac address of the sender
+      
+      // Add the new peer
+      memcpy(peerInfo.peer_addr, EJECT_Address, 6);
+      if (esp_now_add_peer(&peerInfo) == ESP_OK) {
+        LogDebugFormatted("New peer added successfully, OSSM addresss : %02X:%02X:%02X:%02X:%02X:%02X\n", EJECT_Address[0], EJECT_Address[1], EJECT_Address[2], EJECT_Address[3], EJECT_Address[4], EJECT_Address[5]);
+        Eject_paired = true;
+      }
+      else {
+        LogDebug("Failed to add new peer");
+      }
+    }
+    else {
+      LogDebug("Failed to remove peer");
+    }
+    
+    outgoingcontrol.esp_target = EJECT_ID;
+    
+    result = esp_now_send(EJECT_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    LogDebug(result);
+    if (result == ESP_OK) {
+      Eject_paired = true;
+      LogDebug("Eject Connected");
+      //lv_label_set_text(ui_connect, "Connected");
+      //lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+    }
   }
-  switch(incomingcontrol.esp_command)
+  if (incomingcontrol.esp_source == OSSM_ID){
+  switch(incomingcontrol.esp_command){
     {
     case OFF: 
     {
@@ -349,25 +401,54 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     break;
     }
 }
+}
+}
 
 //Sends Commands and Value to Remote device returns ture or false if sended
 bool SendCommand(int Command, float Value, int Target){
-  
-  if(Ossm_paired == true){
+  switch(Target){
+    {
+      case OSSM_ID:
+      {   
+        if(Ossm_paired == true){
 
-    outgoingcontrol.esp_connected = true;
-    outgoingcontrol.esp_command = Command;
-    outgoingcontrol.esp_value = Value;
-    outgoingcontrol.esp_target = Target;
-    esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-  
-    if (result == ESP_OK) {
-      return true;
-    } 
-    else {
-      delay(20);
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      return false;
+        outgoingcontrol.esp_connected = true;
+        outgoingcontrol.esp_command = Command;
+        outgoingcontrol.esp_value = Value;
+        outgoingcontrol.esp_target = Target;
+        esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      
+        if (result == ESP_OK) {
+          return true;
+          } else {
+            delay(20);
+            esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+            return false;
+          }
+        }
+      }
+      break;
+      case EJECT_ID:
+      {
+        if(Eject_paired == true){
+
+            outgoingcontrol.esp_connected = true;
+            outgoingcontrol.esp_command = Command;
+            outgoingcontrol.esp_value = Value;
+            outgoingcontrol.esp_target = Target;
+            esp_err_t result = esp_now_send(EJECT_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+          
+            if (result == ESP_OK) {
+              return true;
+            } 
+            else {
+              delay(20);
+              esp_err_t result = esp_now_send(EJECT_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+              return false;
+            }
+        }
+      }
+      break;
     }
   }
 }
@@ -379,6 +460,12 @@ void connectbutton(lv_event_t * e)
       outgoingcontrol.esp_heartbeat = true;
       outgoingcontrol.esp_target = OSSM_ID;
       esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    }
+    if(!Eject_paired){
+      outgoingcontrol.esp_command = HEARTBEAT;
+      outgoingcontrol.esp_heartbeat = true;
+      outgoingcontrol.esp_target = EJECT_ID;
+      esp_err_t result = esp_now_send(EJECT_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     }
 }
 
@@ -452,19 +539,46 @@ void screenmachine(lv_event_t * e)
 
   } else if (lv_scr_act() == ui_EJECTSettings){
     st_screens = ST_UI_EJECTSETTINGS;
+    //MARCO
+    lv_slider_set_range(ui_EJECTSPEEDslider, 0, 60);
+    cum_speed = lv_slider_get_value(ui_EJECTSPEEDslider);
+    cum_s_enc =  fscale(0, 60, 0, (Encoder_MAP/4), cum_speed, 0);
+    encoder1.setCount(cum_s_enc); 
+
+    lv_slider_set_range(ui_EJECTTIMEslider, 0, 61);
+    cum_time = lv_slider_get_value(ui_EJECTTIMEslider);       
+    cum_t_enc =  fscale(0, 61, 0, (Encoder_MAP/4), cum_time, 0);
+    encoder2.setCount(cum_t_enc);
+
+    lv_slider_set_range(ui_EJECTSIZEslider, 0, 20);        
+    cum_size = lv_slider_get_value(ui_EJECTSIZEslider);    
+    cum_si_enc =  fscale(0, 40, 0, (Encoder_MAP/4), cum_size, 0);
+    encoder3.setCount(cum_si_enc);
+
+    cum_accel = lv_slider_get_value(ui_EJECTACCELslider);
+    cum_a_enc =  fscale(0, 20, 0, (Encoder_MAP/4), cum_accel, 0);
+    encoder4.setCount(cum_a_enc);   
+
   } else if (lv_scr_act() == ui_Settings){
     st_screens = ST_UI_SETTINGS;
   }
 }
 
 void ejectcreampie(lv_event_t * e){
-  if(EJECT_On == true){
-    lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+  //SendCommand(ON, EJECT_On, EJECT_ID);
+  lv_obj_clear_state(ui_EJECTButtonL, LV_STATE_CHECKED);
+}
+
+void eject_timed(lv_event_t * e){
+ if(EJECT_On == true){
+    lv_obj_clear_state(ui_EJECTButtonL, LV_STATE_CHECKED);
     EJECT_On = false;
+    SendCommand(CUMOFF, EJECT_On, EJECT_ID);
   } else if(EJECT_On == false){
-    lv_obj_add_state(ui_HomeButtonL, LV_STATE_CHECKED);
+    lv_obj_add_state(ui_EJECTButtonL, LV_STATE_CHECKED);
     EJECT_On = true;
-  } 
+    SendCommand(CUMON, EJECT_On, EJECT_ID);
+}
 }
 
 void savepattern(lv_event_t * e){
@@ -539,7 +653,9 @@ void setup(){
   Button1.attachClick(mxclick);
   Button1.attachLongPressStop(mxlong);
   Button2.attachClick(click2);
+  Button2.attachLongPressStop(click2long);
   Button3.attachClick(click3);
+  Button3.attachLongPressStop(click3long);
 
     //****Load EEPROOM:
   eject_status = EEPROM.readBool(EJECT);
@@ -730,6 +846,10 @@ void loop()
          lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
          lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
+        } else if(click2_long_waspressed == true){
+         lv_obj_send_event(ui_HomeButtonL, LV_EVENT_LONG_PRESSED, NULL);
+        } else if(click3_long_waspressed == true){
+         lv_obj_send_event(ui_HomeButtonR, LV_EVENT_LONG_PRESSED, NULL);
         }
         
 
@@ -859,7 +979,115 @@ void loop()
         } else if(mxclick_short_waspressed == true){
          lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
-         
+         lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
+        }
+
+        //MARCO ADD ENCODER READ
+        // Encoder 1 cum Speed 
+        if(lv_slider_is_dragged(ui_EJECTSPEEDslider) == false){
+          if (encoder1.getCount() != cum_s_enc){
+            lv_slider_set_value(ui_EJECTSPEEDslider, cum_speed, LV_ANIM_OFF);
+            LogDebug("Slider Cumspeed + " );
+            if(encoder1.getCount() <= 0){
+              encoder1.setCount(0);
+            } else if (encoder1.getCount() >= Encoder_MAP){
+              encoder1.setCount(Encoder_MAP);
+            } 
+            cum_s_enc = encoder1.getCount();
+            cum_speed = fscale(0.5, Encoder_MAP, 0, 60, cum_s_enc, 0);
+            SendCommand(CUMSPEED, cum_speed, EJECT_ID);
+          }
+        } else if(lv_slider_get_value(ui_EJECTSPEEDslider) != cum_speed){
+            cum_s_enc =  fscale(0.5, 60, 0, Encoder_MAP, cum_speed, 0);
+            encoder1.setCount(cum_s_enc);
+            cum_speed = lv_slider_get_value(ui_EJECTSPEEDslider);
+            LogDebug("turn cumspeed + " );
+            LogDebug(cum_s_enc);
+            LogDebug(cum_speed);
+            SendCommand(CUMSPEED, cum_speed, EJECT_ID);
+        }
+        char cum_speed_v[7];
+        dtostrf(cum_speed, 6, 0, cum_speed_v);
+        lv_label_set_text(ui_EJECTSPEEDvalue, cum_speed_v);
+
+
+
+        // Encoder2 Time
+        if(lv_slider_is_dragged(ui_EJECTTIMEslider) == false){
+          if (encoder2.getCount() != cum_t_enc){
+            lv_slider_set_value(ui_EJECTTIMEslider, cum_time, LV_ANIM_OFF);
+            if(encoder2.getCount() <= 0){
+              encoder2.setCount(0);
+            } else if (encoder2.getCount() >= Encoder_MAP){
+              encoder2.setCount(Encoder_MAP);
+            } 
+            cum_t_enc = encoder2.getCount();
+            cum_time = fscale(0, Encoder_MAP, 0, 61, cum_t_enc, 0);
+            SendCommand(CUMTIME, cum_time, EJECT_ID);
+          }
+        } else if(lv_slider_get_value(ui_EJECTTIMEslider) != cum_time){
+            cum_t_enc =  fscale(0, 61, 0, Encoder_MAP, cum_time, 0);
+            encoder2.setCount(cum_t_enc);
+            cum_time = lv_slider_get_value(ui_EJECTTIMEslider);
+            SendCommand(CUMTIME, cum_time, EJECT_ID);
+        }
+        char cum_time_v[7];
+        dtostrf(cum_time, 6, 0, cum_time_v);
+        lv_label_set_text(ui_EJECTTIMEvalue, cum_time_v);
+        
+
+        // Encoder3 cum_size
+        if(lv_slider_is_dragged(ui_EJECTSIZEslider) == false){
+          if (encoder3.getCount() != cum_si_enc){
+            lv_slider_set_value(ui_EJECTSIZEslider, cum_size, LV_ANIM_OFF);
+            if(encoder3.getCount() <= 0){
+              encoder3.setCount(0);
+            } else if (encoder3.getCount() >= Encoder_MAP){
+              encoder3.setCount(Encoder_MAP);
+            } 
+            cum_si_enc = encoder3.getCount();
+            cum_size = fscale(0, Encoder_MAP, 0, 20, cum_si_enc, 0);
+            SendCommand(CUMSIZE, cum_size, EJECT_ID);
+          }
+        } else if(lv_slider_get_value(ui_EJECTSIZEslider) != cum_size){
+            cum_si_enc =  fscale(0, 20, 0, Encoder_MAP, cum_size, 0);
+            encoder3.setCount(cum_si_enc);
+            cum_size = lv_slider_get_value(ui_EJECTSIZEslider);
+            SendCommand(CUMSIZE, cum_size, EJECT_ID);
+        }
+        char cum_size_v[7];
+        dtostrf(cum_size, 6, 0, cum_size_v);
+        lv_label_set_text(ui_EJECTSIZEvalue, cum_size_v);
+
+        //    cum_a_enc = encoder4.getCount();
+        //    cum_accel = map(constrain(cum_a_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
+
+        // Encoder4 Sensation
+        if(lv_slider_is_dragged(ui_EJECTACCELslider) == false){
+          if (encoder4.getCount() != cum_a_enc){
+            lv_slider_set_value(ui_EJECTACCELslider, cum_accel, LV_ANIM_OFF);
+            if(encoder4.getCount() <= 0){
+              encoder4.setCount(0);
+            } else if (encoder4.getCount() >= (Encoder_MAP)){
+              encoder4.setCount((Encoder_MAP));
+            } 
+            cum_a_enc = encoder4.getCount();
+            cum_accel = fscale(0, (Encoder_MAP), 0, 20, cum_a_enc, 0);
+            SendCommand(CUMACCEL, cum_accel, EJECT_ID);
+          }
+        } else if(lv_slider_get_value(ui_EJECTACCELslider) != cum_accel){
+            cum_a_enc =  fscale(0, 20, 0, (Encoder_MAP), cum_accel, 0);
+            encoder4.setCount(cum_s_enc);
+            cum_accel = lv_slider_get_value(ui_EJECTACCELslider);
+            SendCommand(CUMACCEL, cum_accel, EJECT_ID);
+        }
+
+        if(click2_short_waspressed == true){
+         lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
+        } else if(mxclick_short_waspressed == true){
+         lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
+        } else if(click3_short_waspressed == true){
+         lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
       break;
@@ -905,59 +1133,15 @@ void espNowRemoteTask(void *pvParameters)
       outgoingcontrol.esp_target = OSSM_ID;
       esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     }
+    if(Eject_paired){
+      outgoingcontrol.esp_command = HEARTBEAT;
+      outgoingcontrol.esp_heartbeat = true;
+      outgoingcontrol.esp_target = EJECT_ID;
+      esp_err_t result = esp_now_send(EJECT_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    }
     vTaskDelay(HEARTBEAT_INTERVAL);
   }
 }
-
-/*
-void cumscreentask(void *pvParameters)
-{
-  for(;;)
-  {
-    M5.Lcd.setTextColor(FrontColor);
-    if(encoder1.getCount() != cum_s_enc)
-    {
-    cum_s_enc = encoder1.getCount();
-    cum_speed = map(constrain(cum_s_enc,0,Encoder_MAP),0,Encoder_MAP,1000,30000);
-    M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S1Pos+progheight-5);
-    M5.Lcd.print(cum_speed);
-    SendCommand(CUMSPEED, cum_speed, CUM);
-    }
-
-  if(encoder2.getCount() != cum_t_enc)
-    {
-    cum_t_enc = encoder2.getCount();
-    cum_time = map(constrain(cum_t_enc,0,Encoder_MAP),0,Encoder_MAP,0,60);
-    M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S2Pos+progheight-5);
-    M5.Lcd.print(cum_time);
-    SendCommand(CUMTIME, cum_time, CUM);
-    }
-
-   if(encoder3.getCount() != cum_si_enc)
-    {
-    cum_si_enc = encoder3.getCount();
-    cum_size = map(constrain(cum_si_enc,0,Encoder_MAP),0,Encoder_MAP,0,40);
-    M5.Lcd.fillRect(199,S3Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S3Pos+progheight-5);
-    M5.Lcd.print(cum_size);
-    SendCommand(CUMSIZE, cum_size, CUM);
-    }
-
-   if(encoder4.getCount() != cum_a_enc)
-    {
-    cum_a_enc = encoder4.getCount();
-    cum_accel = map(constrain(cum_a_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
-    M5.Lcd.fillRect(199,S4Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S4Pos+progheight-5);
-    M5.Lcd.print(cum_accel);
-    SendCommand(CUMACCEL, cum_accel, CUM);
-    }
-  vTaskDelay(100);
-  }
-}
-*/
 
 void vibrate(){
     if(vibrate_mode == true){
@@ -986,4 +1170,14 @@ void click2() {
 void click3() {
   vibrate();
   click3_short_waspressed = true;
+} // click1
+
+void click2long() {
+  vibrate();
+  click2_long_waspressed = true;
+} // click2long
+
+void click3long() {
+  vibrate();
+  click3_long_waspressed = true;
 } // click1
