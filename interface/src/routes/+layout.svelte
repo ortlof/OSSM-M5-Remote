@@ -16,6 +16,9 @@
 	import Statusbar from './statusbar.svelte';
 	import Login from './login.svelte';
 	import type { Analytics } from '$lib/types/models';
+	import type { RSSI } from '$lib/types/models';
+	import type { Battery } from '$lib/types/models';
+	import type { DownloadOTA } from '$lib/types/models';
 
 	export let data: LayoutData;
 
@@ -23,12 +26,12 @@
 		if ($user.bearer_token !== '') {
 			await validateUser($user);
 		}
-		user.subscribe((value) => {
-			if (value.bearer_token !== '') {
-				const ws_token = $page.data.features.security ? '?access_token=' + $user.bearer_token : '';
-				socket.init(`ws://${window.location.host}/ws${ws_token}`);
-			}
-		});
+		const ws_token = $page.data.features.security ? '?access_token=' + $user.bearer_token : '';
+		socket.init(
+			`ws://${window.location.host}/ws/events${ws_token}`,
+			$page.data.features.event_use_json
+		);
+
 		addEventListeners();
 	});
 
@@ -37,17 +40,14 @@
 	});
 
 	const addEventListeners = () => {
-		socket.on('analytics', handleAnalytics);
 		socket.on('open', handleOpen);
 		socket.on('close', handleClose);
 		socket.on('error', handleError);
 		socket.on('rssi', handleNetworkStatus);
-		socket.on('infoToast', handleInfoToast);
-		socket.on('successToast', handleSuccessToast);
-		socket.on('warningToast', handleWarningToast);
-		socket.on('errorToast', handleErrorToast);
-		socket.on('battery', handleBattery);
-		socket.on('download_ota', handleOAT);
+		socket.on('notification', handleNotification);
+		if ($page.data.features.analytics) socket.on('analytics', handleAnalytics);
+		if ($page.data.features.battery) socket.on('battery', handleBattery);
+		if ($page.data.features.download_firmware) socket.on('otastatus', handleOAT);
 	};
 
 	const removeEventListeners = () => {
@@ -55,12 +55,9 @@
 		socket.off('open', handleOpen);
 		socket.off('close', handleClose);
 		socket.off('rssi', handleNetworkStatus);
-		socket.off('infoToast', handleInfoToast);
-		socket.off('successToast', handleSuccessToast);
-		socket.off('warningToast', handleWarningToast);
-		socket.off('errorToast', handleErrorToast);
+		socket.off('notification', handleNotification);
 		socket.off('battery', handleBattery);
-		socket.off('download_ota', handleOAT);
+		socket.off('otastatus', handleOAT);
 	};
 
 	async function validateUser(userdata: userProfile) {
@@ -82,25 +79,41 @@
 
 	const handleOpen = () => {
 		notifications.success('Connection to device established', 5000);
-		telemetry.setRSSI('found');
 	};
 
-	const handleClose = () => notifications.error('Connection to device lost', 5000);
+	const handleClose = () => {
+		notifications.error('Connection to device lost', 5000);
+		telemetry.setRSSI({ rssi: 0, ssid: '' });
+	};
 
 	const handleError = (data: any) => console.error(data);
 
-	const handleInfoToast = (data: string) => notifications.info(data, 5000);
-	const handleWarningToast = (data: string) => notifications.warning(data, 5000);
-	const handleErrorToast = (data: string) => notifications.error(data, 5000);
-	const handleSuccessToast = (data: string) => notifications.success(data, 5000);
+	const handleNotification = (data: any) => {
+		switch (data.type) {
+			case 'info':
+				notifications.info(data.message, 5000);
+				break;
+			case 'warning':
+				notifications.warning(data.message, 5000);
+				break;
+			case 'error':
+				notifications.error(data.message, 5000);
+				break;
+			case 'success':
+				notifications.success(data.message, 5000);
+				break;
+			default:
+				break;
+		}
+	};
 
 	const handleAnalytics = (data: Analytics) => analytics.addData(data);
 
-	const handleNetworkStatus = (data: string) => telemetry.setRSSI(data);
+	const handleNetworkStatus = (data: RSSI) => telemetry.setRSSI(data);
 
-	const handleBattery = (data: string) => telemetry.setBattery(data);
+	const handleBattery = (data: Battery) => telemetry.setBattery(data);
 
-	const handleOAT = (data: string) => telemetry.setDownloadOTA(data);
+	const handleOAT = (data: DownloadOTA) => telemetry.setDownloadOTA(data);
 
 	let menuOpen = false;
 </script>

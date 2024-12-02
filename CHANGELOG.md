@@ -2,41 +2,95 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.3.1] - Work in Progress
+## WIP
+
+### Fixed
+
+- Ensure thread safety for client subscriptions [#58](https://github.com/theelims/ESP32-sveltekit/pull/58)
+
+## [0.5.0] - 2024-05-06
+
+Changes the Event Socket System to use a clearer message structure and MessagePack. Brings breaking changes to the `EventSocket.h` API.
+
+Updated daisyUI to v4. This has changes in the colors and switches to OKLCH. Also button groups and input groups have been depreciated in favor of join. This might require changes to custom parts of the code. Please double check all websites if the still have the desired looks.
+
+Updates ArduinoJSON from v6 to v7 to increase the available free heap. If you make use of ArduinoJSON, changes might be required.
+
+### Added
+
+- Debug buildflag to switch between MessagePack and JSON for event messages.
+- Show SSID of the current WiFi Station as tooltip of the RSSI icon.
+
+### Changed
+
+- Moved MQTT types to models.ts as well. [#49](https://github.com/theelims/ESP32-sveltekit/pull/49)
+- Updated daisyUI to 4.10.2 [#48](https://github.com/theelims/ESP32-sveltekit/pull/48)
+- Fixed spelling error in models.ts
+- Changed ArduinoJson from v6 to v7 increasing the free heap by ~40kb
+- Split NotificationService out of EventSocket into own class
+- Changed API of EventSocket.h. Now uses `void emitEvent(String event, JsonObject &jsonObject, const char *originId = "", bool onlyToSameOrigin = false);`.
+- Changed event socket message format to MessagePack
+
+### Fixed
+
+- Fixes to WiFi.svelte and models.ts to fix type errors and visibility rights.
+- Fixes bug in highlighting the menu when navigating with the browser (back/forward)
+- Made WiFi connection routine more robust by using BSSID. Ensures that the STA truly connects to the strongest hotspot, even if several hotspots are in reach.
+
+### Removed
+
+- Removed duplicate in ESP32SvelteKit.cpp [#47](https://github.com/theelims/ESP32-sveltekit/pull/47) and WiFi.svelte [#50](https://github.com/theelims/ESP32-sveltekit/pull/50)
+
+### Acknowledgment
+
+Many thanks to @runeharlyk who contributed significantly to the new event socket system and fixed many smaller issues with the front-end.
+
+## [0.4.0] - 2024-04-21
+
+This upgrade might require one minor change as `MqttPubSub.h` and its class had been renamed to `MqttEndpoint.h` and `MqttEndoint` respectively. However, it is strongly advised, that you change all existing WebSocketServer endpoints to the new event socket system.
+
+> [!NOTE]
+> The new Event Socket system is likely to change with coming updates.
 
 ### Added
 
 - Added build flag `-D SERIAL_INFO` to platformio.ini to enable / disable all `Serial.print()` statements. On some boards with native USB those Serial prints have been reported to block and make the server unresponsive.
-- Added a hook handler to StatefulService. Unlike an UPDATE a hook is called every time a state receives and updated, even if the result is UNCHANGED or ERROR.
-- Added missing include for S2 in SystemStatus.cpp (#23)
-- Added awareness of front end build script for all 3 major JS package managers. The script will auto-identify the package manager by the lock-file. (#40)
-- Added a new event source to bundle the websocket server and the notifications events. This saves open sockets and allows up to 2 concurrent visitors of the internal website. The normal websocket server endpoint remains as an option, should a pure websocket connection be desired. An EventEndpoint was added to use this in Stateful Services. (#29 and #43)
+- Added a hook handler to StatefulService. Unlike an UPDATE a hook is called every time a state receives an updated, even if the result is UNCHANGED or ERROR.
+- Added missing include for S2 in SystemStatus.cpp [#23](https://github.com/theelims/ESP32-sveltekit/issues/23)
+- Added awareness of front end build script for all 3 major JS package managers. The script will auto-identify the package manager by the lock-file. [#40](https://github.com/theelims/ESP32-sveltekit/pull/40)
+- Added a new event socket to bundle the websocket server and the notifications events. This saves on open sockets and allows for concurrent visitors of the internal website. The normal websocket server endpoint remains as an option, should a pure websocket connection be desired. An EventEndpoint was added to use this with Stateful Services. [#29](https://github.com/theelims/ESP32-sveltekit/issues/29) and [#43](https://github.com/theelims/ESP32-sveltekit/pull/43)
 - TS Types definition in one central place for the frontend.
 
 ### Changed
 
-- more generic board definition in platformio.ini (#20)
-- refactored MqttEndpoint.h into a single class to improve readability
-- Moves appName and copyright to `layout.ts` to keep customization in one place (#31)
-- Make eventSource use timeout for reconnect (#34)
-- Make each toasts disappear after timeout (#35)
-- Fixed version `platform = espressif32 @ 6.6.0` in platformio.ini
+- more generic board definition in platformio.ini [#20](https://github.com/theelims/ESP32-sveltekit/pull/20)
 - Renamed `MqttPubSub.h` and class to `MqttEndpoint.h` and class.
+- refactored MqttEndpoint.h into a single class to improve readability
+- Moves appName and copyright to `layout.ts` to keep customization in one place [#31](https://github.com/theelims/ESP32-sveltekit/pull/31)
+- Make event source use timeout for reconnect [#34](https://github.com/theelims/ESP32-sveltekit/pull/34)
+- Make each toasts disappear after timeout [#35](https://github.com/theelims/ESP32-sveltekit/pull/35)
+- Fixed version `platform = espressif32 @ 6.6.0` in platformio.ini
 - Analytics data limited to 1000 data points (roughly 33 minutes).
+- postcss.config.cjs as ESM module [#24](https://github.com/theelims/ESP32-sveltekit/issues/24)
 
 ### Fixed
 
 - Fixed compile error with FLAG `-D SERVE_CONFIG_FILES`
-- Fixed typo in telemetry.ts (#38)
-- Fixed the development warning: `Loading /rest/features using `window.fetch`. For best results, use the `fetch`that is passed to your`load` function:`
+- Fixed typo in telemetry.ts [#38](https://github.com/theelims/ESP32-sveltekit/pull/38)
+- Fixed the development warning: `Loading /rest/features using 'window.fetch'. For best results, use the 'fetch' that is passed to your 'load' function:`
 
 ### Removed
 
-- Duplicate method in FeatureService (#18)
+- Duplicate method in FeatureService [#18](https://github.com/theelims/ESP32-sveltekit/pull/18)
 - Duplicate lines in Systems Settings view.
-- Removes duplicate begin (#36)
+- Removes duplicate begin [#36](https://github.com/theelims/ESP32-sveltekit/pull/36)
+- Temporary disabled OTA progress update due to crash with PsychicHttp [#32](https://github.com/theelims/ESP32-sveltekit/issues/32) until a fix is found.
 
-## [0.3.0] - 2023-02-05
+### Known Issues
+
+- On ESP32-C3 the security features should be disabled in features.ini: `-D FT_SECURITY=0`. If enabled the ESP32-C3 becomes extremely sluggish with frequent connection drops.
+
+## [0.3.0] - 2024-02-05
 
 > [!CAUTION]
 > This update has breaking changes!

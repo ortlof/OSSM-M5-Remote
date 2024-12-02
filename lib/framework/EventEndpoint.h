@@ -9,7 +9,7 @@
  *   https://github.com/theelims/ESP32-sveltekit
  *
  *   Copyright (C) 2018 - 2023 rjwats
- *   Copyright (C) 2023 theelims
+ *   Copyright (C) 2023 - 2024 theelims
  *
  *   All Rights Reserved. This software may be modified and distributed under
  *   the terms of the LGPL v3 license. See the LICENSE file for details.
@@ -24,17 +24,26 @@ template <class T>
 class EventEndpoint
 {
 public:
-    EventEndpoint(JsonStateReader<T> stateReader, JsonStateUpdater<T> stateUpdater, StatefulService<T> *statefulService, EventSocket *socket, const char *event, size_t bufferSize = DEFAULT_BUFFER_SIZE) : _stateReader(stateReader),
-                                                                                                                                                                                                            _stateUpdater(stateUpdater),
-                                                                                                                                                                                                            _statefulService(statefulService),
-                                                                                                                                                                                                            _socket(socket),
-                                                                                                                                                                                                            _bufferSize(bufferSize),
-                                                                                                                                                                                                            _event(event)
+    EventEndpoint(JsonStateReader<T> stateReader,
+                  JsonStateUpdater<T> stateUpdater,
+                  StatefulService<T> *statefulService,
+                  EventSocket *socket, const char *event) : _stateReader(stateReader),
+                                                            _stateUpdater(stateUpdater),
+                                                            _statefulService(statefulService),
+                                                            _socket(socket),
+                                                            _event(event)
     {
-        _socket->on(event, std::bind(&EventEndpoint::updateState, this, std::placeholders::_1, std::placeholders::_2));
         _statefulService->addUpdateHandler([&](const String &originId)
                                            { syncState(originId); },
                                            false);
+    }
+
+    void begin()
+    {
+        _socket->registerEvent(_event);
+        _socket->onEvent(_event, std::bind(&EventEndpoint::updateState, this, std::placeholders::_1, std::placeholders::_2));
+        _socket->onSubscribe(_event, [&](const String &originId)
+                             { syncState(originId, true); });
     }
 
 private:
@@ -43,26 +52,19 @@ private:
     StatefulService<T> *_statefulService;
     EventSocket *_socket;
     const char *_event;
-    size_t _bufferSize;
 
-    // TODO Why?
     void updateState(JsonObject &root, int originId)
     {
-        if (_statefulService->updateWithoutPropagation(root, _stateUpdater) == StateUpdateResult::CHANGED)
-        {
-            _statefulService->callUpdateHandlers(String(originId));
-        }
+        _statefulService->update(root, _stateUpdater, String(originId));
     }
 
-    // TODO Does not synchronize state with the client on first connect
-    void syncState(const String &originId)
+    void syncState(const String &originId, bool sync = false)
     {
-        DynamicJsonDocument jsonDocument{_bufferSize};
+        JsonDocument jsonDocument;
         JsonObject root = jsonDocument.to<JsonObject>();
-        String output;
         _statefulService->read(root, _stateReader);
-        serializeJson(root, output);
-        _socket->emit(_event, output.c_str(), originId.c_str());
+        JsonObject jsonObject = jsonDocument.as<JsonObject>();
+        _socket->emitEvent(_event, jsonObject, originId.c_str(), sync);
     }
 };
 

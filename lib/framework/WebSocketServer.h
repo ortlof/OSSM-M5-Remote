@@ -9,7 +9,7 @@
  *   https://github.com/theelims/ESP32-sveltekit
  *
  *   Copyright (C) 2018 - 2023 rjwats
- *   Copyright (C) 2023 theelims
+ *   Copyright (C) 2023 - 2024 theelims
  *
  *   All Rights Reserved. This software may be modified and distributed under
  *   the terms of the LGPL v3 license. See the LICENSE file for details.
@@ -18,8 +18,6 @@
 #include <StatefulService.h>
 #include <PsychicHttp.h>
 #include <SecurityManager.h>
-
-#define WEB_SOCKET_CLIENT_ID_MSG_SIZE 128
 
 #define WEB_SOCKET_ORIGIN "wsserver"
 #define WEB_SOCKET_ORIGIN_CLIENT_ID_PREFIX "wsserver:"
@@ -34,15 +32,13 @@ public:
                     PsychicHttpServer *server,
                     const char *webSocketPath,
                     SecurityManager *securityManager,
-                    AuthenticationPredicate authenticationPredicate = AuthenticationPredicates::IS_ADMIN,
-                    size_t bufferSize = DEFAULT_BUFFER_SIZE) : _stateReader(stateReader),
-                                                               _stateUpdater(stateUpdater),
-                                                               _statefulService(statefulService),
-                                                               _server(server),
-                                                               _bufferSize(bufferSize),
-                                                               _webSocketPath(webSocketPath),
-                                                               _authenticationPredicate(authenticationPredicate),
-                                                               _securityManager(securityManager)
+                    AuthenticationPredicate authenticationPredicate = AuthenticationPredicates::IS_ADMIN) : _stateReader(stateReader),
+                                                                                                            _stateUpdater(stateUpdater),
+                                                                                                            _statefulService(statefulService),
+                                                                                                            _server(server),
+                                                                                                            _webSocketPath(webSocketPath),
+                                                                                                            _authenticationPredicate(authenticationPredicate),
+                                                                                                            _securityManager(securityManager)
     {
         _statefulService->addUpdateHandler(
             [&](const String &originId)
@@ -74,23 +70,23 @@ public:
         // when a client connects, we transmit it's id and the current payload
         transmitId(client);
         transmitData(client, WEB_SOCKET_ORIGIN);
-        ESP_LOGI("WebSocketServer", "ws[%s][%u] connect", client->remoteIP().toString(), client->socket());
+        ESP_LOGI("WebSocketServer", "ws[%s][%u] connect", client->remoteIP().toString().c_str(), client->socket());
     }
 
     void onWSClose(PsychicWebSocketClient *client)
     {
-        ESP_LOGI("WebSocketServer", "ws[%s][%u] disconnect", client->remoteIP().toString(), client->socket());
+        ESP_LOGI("WebSocketServer", "ws[%s][%u] disconnect", client->remoteIP().toString().c_str(), client->socket());
     }
 
     esp_err_t onWSFrame(PsychicWebSocketRequest *request, httpd_ws_frame *frame)
     {
-        ESP_LOGV("WebSocketServer", "ws[%s][%u] opcode[%d]", request->client()->remoteIP().toString(), request->client()->socket(), frame->type);
+        ESP_LOGV("WebSocketServer", "ws[%s][%u] opcode[%d]", request->client()->remoteIP().toString().c_str(), request->client()->socket(), frame->type);
 
         if (frame->type == HTTPD_WS_TYPE_TEXT)
         {
-            ESP_LOGV("WebSocketServer", "ws[%s][%u] request: %s", request->client()->remoteIP().toString(), request->client()->socket(), (char *)frame->payload);
+            ESP_LOGV("WebSocketServer", "ws[%s][%u] request: %s", request->client()->remoteIP().toString().c_str(), request->client()->socket(), (char *)frame->payload);
 
-            DynamicJsonDocument jsonDocument = DynamicJsonDocument(_bufferSize);
+            JsonDocument jsonDocument;
             DeserializationError error = deserializeJson(jsonDocument, (char *)frame->payload, frame->len);
 
             if (!error && jsonDocument.is<JsonObject>())
@@ -117,11 +113,10 @@ private:
     PsychicHttpServer *_server;
     PsychicWebSocketHandler _webSocket;
     String _webSocketPath;
-    size_t _bufferSize;
 
     void transmitId(PsychicWebSocketClient *client)
     {
-        DynamicJsonDocument jsonDocument = DynamicJsonDocument(WEB_SOCKET_CLIENT_ID_MSG_SIZE);
+        JsonDocument jsonDocument;
         JsonObject root = jsonDocument.to<JsonObject>();
         root["type"] = "id";
         root["id"] = clientId(client);
@@ -141,7 +136,7 @@ private:
      */
     void transmitData(PsychicWebSocketClient *client, const String &originId)
     {
-        DynamicJsonDocument jsonDocument = DynamicJsonDocument(_bufferSize);
+        JsonDocument jsonDocument;
         JsonObject root = jsonDocument.to<JsonObject>();
         String buffer;
 

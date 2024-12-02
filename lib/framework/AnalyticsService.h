@@ -7,7 +7,7 @@
  *   with responsive Sveltekit front-end built with TailwindCSS and DaisyUI.
  *   https://github.com/theelims/ESP32-sveltekit
  *
- *   Copyright (C) 2023 theelims
+ *   Copyright (C) 2023 - 2024 theelims
  *
  *   All Rights Reserved. This software may be modified and distributed under
  *   the terms of the LGPL v3 license. See the LICENSE file for details.
@@ -19,6 +19,7 @@
 #include <EventSocket.h>
 
 #define MAX_ESP_ANALYTICS_SIZE 1024
+#define EVENT_ANALYTICS "analytics"
 #define ANALYTICS_INTERVAL 2000
 
 class AnalyticsService
@@ -28,6 +29,8 @@ public:
 
     void begin()
     {
+        _socket->registerEvent(EVENT_ANALYTICS);
+
         xTaskCreatePinnedToCore(
             this->_loopImpl,            // Function that should be called
             "Analytics Service",        // Name of the task (for debugging)
@@ -46,11 +49,9 @@ protected:
     void _loop()
     {
         TickType_t xLastWakeTime = xTaskGetTickCount();
-        StaticJsonDocument<MAX_ESP_ANALYTICS_SIZE> doc;
-        char message[MAX_ESP_ANALYTICS_SIZE];
+        JsonDocument doc;
         while (1)
         {
-            doc.clear();
             doc["uptime"] = millis() / 1000;
             doc["free_heap"] = ESP.getFreeHeap();
             doc["total_heap"] = ESP.getHeapSize();
@@ -60,8 +61,8 @@ protected:
             doc["fs_total"] = ESPFS.totalBytes();
             doc["core_temp"] = temperatureRead();
 
-            serializeJson(doc, message);
-            _socket->emit("analytics", message);
+            JsonObject jsonObject = doc.as<JsonObject>();
+            _socket->emitEvent(EVENT_ANALYTICS, jsonObject);
 
             vTaskDelayUntil(&xLastWakeTime, ANALYTICS_INTERVAL / portTICK_PERIOD_MS);
         }
