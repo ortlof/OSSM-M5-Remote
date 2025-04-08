@@ -8,17 +8,17 @@ A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the [O
 Intially developed for the OSSM Project: 
 https://github.com/KinkyMakers/OSSM-hardware
 
-# [Assembly instructions Klick Here !](Assembly.md)
- 
-
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
-Works not with Official OSSM Firmware Right now.
+## !!! It does not Work with the Official OSSM Firmware !!!
 This Branch is needed: https://github.com/ortlof/OSSM-Stroke
 
-Supported in this version of the M5 remote:
-## Supported sex toys in this version
+The Cable remote is obsolete with this firmware. If you want to go back you need to flash the OSSM orginal firmware back.
 
+You can Easy flash the OSSM Mainboard with this [Online Flasher](https://openlust.org/lust-remote/lustremote-firmware/).
+
+
+## Supported in this version of the M5 remote:
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
 
 ## Not Supported sex toys in this version
@@ -27,21 +27,23 @@ Supported in this version of the M5 remote:
 
 
 
-
 # Build the OSSM M5 Remote Yourself
+
+### Assembly instructions: [Klick Here !](Assembly.md)
 
 ## Bill Of Materials for sourcing Electrical Components
 
-All Stacks are supported Now.
+All M5Stack Core2 and CoreS3 are supported Now.
 
 BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
 PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to make one yourself or use a different manufacturer other than PCBWay.
 
-## Additional parts needed that are not found on Octopart:  
+## Additional parts needed that are not PCB:  
 
 | Quantity | Part | Sourcing EU | Price € |
 |----------|------|-------------|---------|
+| 1x | M5Stack CoreS3 SE | https://www.digikey.de/de/products/detail/m5stack-technology-co-ltd/K128-SE/23628221?s=N4IgTCBcDaILIFYDKAXAhgYwNYAIDCA9gE4CmSAzDkgKIgC6AvkA | 43 € |
 | 2x | M3x25mm Hex Head Cap Bolt | https://www.amazon.de/Edelstahl-Innensechskant-Bolzenset-Eisenrahmen-Mechanischer-Innensechskantschraube-Mutternset/dp/B07PPFT871/ | 12,97 € |
 | 4x | M3x20mm Hex Head Cap Bolt | Comes as part of the set mentioned above | " | 
 | 4x | Heat Set inserts M3 | https://www.amazon.de/ruthex-Gewindeeinsatz-St%C3%BCck-Gewindebuchsen-Kunststoffteile/dp/B08BCRZZS3 | 8,99 € |
@@ -53,6 +55,7 @@ PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to 
 
 | Quantity | Part | Sourcing US | Price $ |
 |----------|------|-------------|---------|
+| 1x | M5Stack CoreS3 SE | https://www.digikey.de/de/products/detail/m5stack-technology-co-ltd/K128-SE/23628221?s=N4IgTCBcDaILIFYDKAXAhgYwNYAIDCA9gE4CmSAzDkgKIgC6AvkA | $47|
 | 2x | M3x25mm Hex Head Cap Bolt | https://www.amazon.com/dp/B09NR8X2LV | $17.99 |
 | 4x | M3x20mm Hex Head Cap Bolt | Comes as part of the set mentioned above | " | 
 | 4x | Heat Set inserts M3 | https://www.amazon.com/ruthex-M3-Threaded-Inserts-RX-M3x5-7/dp/B08BCRZZS3 | $10.99 |
@@ -70,10 +73,7 @@ PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to 
 
 Filament - A good quality PLA works well. While there are no threads it is recommended that your printer is well calibrated.  
 
-__Note:__
-If you are one of the very small number of Version 1 PCB users, you will need to change your version to V1 in the config.h. The current version in GitHub is V2.
-
-## Operation, or...how do I use it?
+## Operation, or how do I use it?
 
 1. Power on the OSSM and let it home.
 2. Power on the OSSM M5 Remote.
