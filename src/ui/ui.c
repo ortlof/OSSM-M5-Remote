@@ -1057,10 +1057,11 @@ void ui_Home_screen_init(void)
     lv_obj_set_width(ui_connect, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_connect, LV_SIZE_CONTENT);
 
-    lv_obj_set_x(ui_connect, -113);
+    lv_obj_set_x(ui_connect, 10);
     lv_obj_set_y(ui_connect, -102);
 
-    lv_obj_set_align(ui_connect, LV_ALIGN_CENTER);
+    lv_obj_set_align(ui_connect, LV_ALIGN_LEFT_MID);
+
 
     lv_label_set_text(ui_connect, T_BLANK);
 

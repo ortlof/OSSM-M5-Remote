@@ -13,9 +13,8 @@
 #include "ui/ui.h"
 #include "main.h"
 #include "Preferences.h"      //EEPROM replacement function
-
-#define LV_CONF_INCLUDE_SIMPLE
-#include <lvgl.h>
+#include "OssmBLE.h"
+#include "language.h"
 #include <esp_timer.h>
 
 constexpr int32_t HOR_RES=320;
@@ -38,8 +37,8 @@ constexpr int32_t VER_RES=240;
 #define LogDebugFormatted(...) ((void)0)
 #endif
 
-#define OFF 0.0
-#define ON 1.0
+#define OFF 0
+#define ON 1
 
 // Screens 
 
@@ -81,6 +80,9 @@ bool touch_home = false;
 bool touch_disabled = false;
 
 // Command States
+#undef OFF
+#undef ON
+#undef CONNECT
 #define CONN 0
 #define SPEED 1
 #define DEPTH 2
@@ -129,8 +131,8 @@ long cum_s_enc = 0;
 long cum_a_enc = 0;
 long encoder4_enc = 0;
 
-extern float maxdepthinmm = 400.0;
-extern float speedlimit = 300;
+float maxdepthinmm = 400.0;
+float speedlimit = 300;
 int speedscale = -5;
 
 float speed = 0.0;
@@ -145,13 +147,13 @@ float cum_size = 0.0;
 float cum_accel = 0.0;
 
 unsigned long nowMs;
-int  rampMs;
+unsigned long rampMs = 0;
 bool rampEnabled = true;
-int rampValue;
+int rampValue = 1;
 int rampTime = 75;
 int maxRamp = 8;
-int encId;
-int activeEncId;
+int encId = 0;
+int activeEncId = 0;
 
 bool dynamicStroke = false;
 
@@ -220,6 +222,7 @@ TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
 void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
 bool connectbtn(); //Handels Connectbtn
 int64_t touchmenue();
+bool SendCommand(int Command, float Value, int Target);
 
 // Makes vibration motor go Brrrrr
 void vibrate(int vbr_Intensity = 200, int vbr_Length = 100){
@@ -243,6 +246,33 @@ bool click3_long_waspressed = false;
 void c3double();
 bool click3_double_waspressed = false;
 
+
+static int getRampedDetentDelta(int encoderId, int detents)
+{
+  if (detents == 0) return 0;
+  if (!rampEnabled) {
+    rampValue = 1;
+    activeEncId = encoderId;
+    rampMs = millis();
+    return detents;
+  }
+  unsigned long now = millis();
+  bool sameEncoder = (encoderId == activeEncId);
+  bool withinRampWindow = ((now - rampMs) <= (unsigned long)rampTime);
+  if (!sameEncoder || !withinRampWindow) {
+    rampValue = 1;
+  }
+  int sign = (detents > 0) ? 1 : -1;
+  int steps = abs(detents);
+  int delta = 0;
+  for (int i = 0; i < steps; ++i) {
+    delta += sign * rampValue;
+    if (rampValue < maxRamp) ++rampValue;
+  }
+  activeEncId = encoderId;
+  rampMs = now;
+  return delta;
+}
 
 lv_display_t *display;
 lv_indev_t *indev;
@@ -304,14 +334,15 @@ static void event_cb(lv_event_t *e)
   }
 }
 
-
-
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 }
 
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
 
+
+
+  
   if(incomingcontrol.esp_target == M5_ID && Ossm_paired == false){
 
     // Remove the existing peer (0xFF:0xFF:0xFF:0xFF:0xFF:0xFF)
@@ -326,6 +357,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       if (esp_now_add_peer(&peerInfo) == ESP_OK) {
         LogDebugFormatted("New peer added successfully, OSSM addresss : %02X:%02X:%02X:%02X:%02X:%02X\n", OSSM_Address[0], OSSM_Address[1], OSSM_Address[2], OSSM_Address[3], OSSM_Address[4], OSSM_Address[5]);
         Ossm_paired = true;
+        lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
       }
       else {
         LogDebug("Failed to add new peer");
@@ -356,6 +388,27 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
   }
+
+  // Update limits from post-homing OSSM packets.
+  // The OSSM sends speed=0 before homing, then sends the real max speed once homing
+  // is complete. Because Ossm_paired is already true by then, the block above is
+  // skipped – so we catch those updates here instead.
+  if (incomingcontrol.esp_target == M5_ID && Ossm_paired == true && !OssmBleIsMode()) {
+    if (incomingcontrol.esp_speed > 0) {
+      //speedlimit = (incomingcontrol.esp_speed > 300) ? 300.0f : incomingcontrol.esp_speed;
+      if (st_screens == ST_UI_HOME) {
+        lv_slider_set_range(ui_homespeedslider, 0, incomingcontrol.esp_speed);
+      }
+    }
+    if (incomingcontrol.esp_depth > 0) {
+      maxdepthinmm = incomingcontrol.esp_depth;
+      if (st_screens == ST_UI_HOME) {
+        lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
+        lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
+      }
+    }
+  }
+
   switch(incomingcontrol.esp_command)
     {
     case OFF: 
@@ -373,7 +426,23 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 //Sends Commands and Value to Remote device returns ture or false if sended
 bool SendCommand(int Command, float Value, int Target){
-  
+  if(Target == OSSM_ID && OssmBleIsMode()){
+    // Safety rule: when speed is set while depth or stroke is zero on screen,
+    // force depth/stroke zero first to avoid stale OSSM-side values.
+    if (Command == SPEED && (depth <= 0.5f || stroke <= 0.5f)) {
+      OssmBleSendCommand(DEPTH, 0, speed, maxdepthinmm, speedlimit, nullptr);
+      OssmBleSendCommand(STROKE, 0, speed, maxdepthinmm, speedlimit, nullptr);
+    }
+
+    String response;
+    bool ok = OssmBleSendCommand(Command, Value, speed, maxdepthinmm, speedlimit, &response);
+    if (response.length() > 0) {
+      LogDebug("BLE response:");
+      LogDebug(response);
+    }
+    return ok;
+  }
+
   if(Ossm_paired == true){
 
     outgoingcontrol.esp_connected = true;
@@ -387,19 +456,43 @@ bool SendCommand(int Command, float Value, int Target){
     } 
     else {
       delay(20);
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       return false;
     }
   }
+
+  return false;
 }
 
 void connectbutton(lv_event_t * e)
 {
+    lv_label_set_text(ui_Welcome, T_CONNECTING);
+
     if(!Ossm_paired){
+      OssmBleSetMode(false);
+
       outgoingcontrol.esp_command = HEARTBEAT;
       outgoingcontrol.esp_heartbeat = true;
       outgoingcontrol.esp_target = OSSM_ID;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+
+      bool bleConnected = OssmBleTryConnect();
+      if (bleConnected) {
+        lv_label_set_text(ui_Welcome, T_BLECONNECTED);
+
+        OssmBleSetMode(true);
+        Ossm_paired = true;
+        OssmBlePrepareStrokeEngine();
+        //lv_label_textall
+        lv_label_set_text(ui_connect, "BLE");
+        lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+      }
+      return;
+    }
+
+    if (OssmBleIsMode()) {
+      lv_label_set_text(ui_connect, "BLE");
+      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
 }
 
@@ -460,8 +553,15 @@ void screenmachine(lv_event_t * e)
     LogDebug(speedenc);
     LogDebug(speed);
 
-    lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
-    lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
+    if (OssmBleIsMode()) {
+      lv_slider_set_range(ui_homespeedslider, 0, 100);
+      lv_slider_set_range(ui_homedepthslider, 0, 100);
+      lv_slider_set_range(ui_homestrokeslider, 0, 100);
+    } else {
+      lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
+      lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
+      lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
+    }
 
             
   } else if (lv_scr_act() == ui_Menue){
@@ -486,19 +586,25 @@ void screenmachine(lv_event_t * e)
 }
 
 void ejectcreampie(lv_event_t * e){
-  if(EJECT_On == true){
-    lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
-    EJECT_On = false;
-  } else if(EJECT_On == false){
-    lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+  lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+  if (eject_status == false) {
+    // No eject addon: button does a pullout manoeuvre
     depth = 0;
     speed = 0;
     stroke = 0;
     SendCommand(SETUP_D_I, 0.0, OSSM_ID);
     SendCommand(DEPTH, depth, OSSM_ID);
     screenmachine(e);
-    EJECT_On = true;
-  } 
+  } else {
+    // Eject addon enabled: toggle eject/cumpump
+    if (EJECT_On == true) {
+      EJECT_On = false;
+      SendCommand(SETUP_D_I, 0.0, OSSM_ID);  // retract
+    } else {
+      EJECT_On = true;
+      SendCommand(SETUP_D_I_F, 0.0, OSSM_ID); // eject forward
+    }
+  }
 }
 
 void savepattern(lv_event_t * e){
@@ -513,21 +619,33 @@ void savepattern(lv_event_t * e){
 void homebuttonmevent(lv_event_t * e){
   LogDebug("HomeButton");
   if(OSSM_On == false){
-    SendCommand(ON, 0.0, OSSM_ID);
+    if (OssmBleIsMode()) {
+      OssmBlePrepareStrokeEngine();
+    }
+    SendCommand(ON, 0, OSSM_ID);
+    if (OssmBleIsMode()) {
+      OSSM_On = true;
+    }
   } else if(OSSM_On == true){
-    SendCommand(OFF, 0.0, OSSM_ID);
+    SendCommand(OFF, 0, OSSM_ID);
+    if (OssmBleIsMode()) {
+      OSSM_On = false;
+    }
   }
 }
 
 void setupDepthInter(lv_event_t * e){
-    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
+    SendCommand(SETUP_D_I, 0, OSSM_ID);
 }
 
 void setupdepthF(lv_event_t * e){
-    SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
+    SendCommand(SETUP_D_I_F, 0, OSSM_ID);
 }
 
 void setup(){
+  Serial.begin(115200);
+  delay(50);
+
   auto cfg = M5.config();
   M5.begin(cfg);
 
@@ -548,6 +666,8 @@ void setup(){
   // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
+  } else {
+    Serial.println("esp_now_init ok");
   }
   // Once ESPNow is successfully Init, we will register for Send CB to
   // get the status of Trasnmitted packet
@@ -598,7 +718,8 @@ void setup(){
   display = lv_display_create(HOR_RES, VER_RES);
   lv_display_set_flush_cb(display, my_display_flush);
 
-  static lv_color_t buf1[HOR_RES * 15]; 
+  // Force a strict alignment for LVGL draw buffer.
+  static lv_color_t buf1[HOR_RES * 15] __attribute__((aligned(16)));
   lv_display_set_buffers(display, buf1, nullptr, sizeof(buf1), LV_DISPLAY_RENDER_MODE_PARTIAL);
 
   indev = lv_indev_create();
@@ -606,10 +727,10 @@ void setup(){
   lv_indev_set_read_cb(indev, my_touchpad_read);
   ui_init();  
 
+  lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
   if(eject_status == true){
   lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
   lv_obj_clear_state(ui_EJECTSettingButton, LV_STATE_DISABLED);
-  lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
   }
   if(dark_mode == true){
   lv_obj_add_state(ui_darkmode, LV_STATE_CHECKED);
@@ -624,11 +745,12 @@ void setup(){
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
 
-
+  LogDebug("Setup complete");
 }
 
 void loop()
 {
+
      bool changed=false;
      const int BatteryLevel = M5.Power.getBatteryLevel();
      String BatteryValue = (String(BatteryLevel, DEC) + "%");
@@ -672,20 +794,35 @@ void loop()
 
       case ST_UI_HOME: //Menu with OSSM control sliders
       {
+        static int lastHomeTransportMode = -1;
+        int currentTransportMode = OssmBleIsMode() ? 1 : 0;
+        if (lastHomeTransportMode != currentTransportMode) {
+          if (currentTransportMode == 1) {
+            lv_slider_set_range(ui_homespeedslider, 0, 100);
+            lv_slider_set_range(ui_homedepthslider, 0, 100);
+            lv_slider_set_range(ui_homestrokeslider, 0, 100);
+          } else {
+            lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
+            lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
+            lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
+          }
+
+          if (speed > lv_slider_get_max_value(ui_homespeedslider)) {
+            speed = lv_slider_get_max_value(ui_homespeedslider);
+          }
+          if (depth > lv_slider_get_max_value(ui_homedepthslider)) {
+            depth = lv_slider_get_max_value(ui_homedepthslider);
+          }
+          if (stroke > lv_slider_get_max_value(ui_homestrokeslider)) {
+            stroke = lv_slider_get_max_value(ui_homestrokeslider);
+          }
+
+          lastHomeTransportMode = currentTransportMode;
+        }
+
         if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
           touch_disabled = true;
         }
-
-          //RampHelper
-          nowMs = millis();
-          if (nowMs - rampMs <= rampTime && rampEnabled == true){ 
-              if (rampValue <= maxRamp && encId == activeEncId){
-            				++rampValue;
-              }
-          }else{
-          rampValue = 1;
-          activeEncId = encId;
-          }
 
         //
         // Encoder 1 Speed 
@@ -694,18 +831,12 @@ void loop()
           changed = false;
           lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
 
-          if (encoder1.getCount() >= 2){      //speed up
+          long speedCount = encoder1.getCount();
+          int speedDetents = (int)(speedCount / 2);
+          if (speedDetents != 0) {
             changed = true;
-            speed += rampValue;
-            encoder1.setCount(0);
-            rampMs = millis();
-            encId = 1;
-		      }else if (encoder1.getCount() <= -2){      //speed down
-            changed = true;
-            speed -=rampValue;
-            encoder1.setCount(0);
-            rampMs = millis();
-            encId = 1;
+            speed += getRampedDetentDelta(1, speedDetents);
+            encoder1.setCount(speedCount % 2);
           }
 
           //speed min-max bounds
@@ -713,9 +844,10 @@ void loop()
             changed = true;
             speed = 0;
           }
-          if (speed > speedlimit){
+          const float speedMax = OssmBleIsMode() ? 100.0f : speedlimit;
+          if (speed > speedMax){
             changed = true;
-            speed = speedlimit;
+            speed = speedMax;
           }
           
           //send speed
@@ -728,8 +860,12 @@ void loop()
             speed = lv_slider_get_value(ui_homespeedslider);
             SendCommand(SPEED, speed, OSSM_ID);
         }
-        char speed_v[7];
-        dtostrf(speed, 6, 0, speed_v);
+        char speed_v[12];
+        if (OssmBleIsMode()) {
+          snprintf(speed_v, sizeof(speed_v), "%d%%", (int)(speed + 0.5f));
+        } else {
+          dtostrf(speed, 6, 0, speed_v);
+        }
         lv_label_set_text(ui_homespeedvalue, speed_v);
 
         //
@@ -739,27 +875,17 @@ void loop()
           changed = false;
           lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
 
-		      if (encoder2.getCount() >= 2){      //depth up
+          long depthCount = encoder2.getCount();
+          int depthDetents = (int)(depthCount / 2);
+          if (depthDetents != 0) {
             changed = true;
-            depth += rampValue;
-            if (dynamicStroke == true){
-              stroke += rampValue;
+            int depthDelta = getRampedDetentDelta(2, depthDetents);
+            depth += depthDelta;
+            if (dynamicStroke == true) {
+              stroke += depthDelta;
+              if (stroke >= depth) stroke = depth;
             }
-            encoder2.setCount(0);
-            rampMs = millis();
-            encId = 2;
-		      }else if (encoder2.getCount() <= -2){      //depth down
-            changed = true;
-            depth -=rampValue;
-            if (dynamicStroke == true){
-              stroke -= rampValue;
-              if(stroke >= depth){
-                stroke = depth;
-              }
-            }
-            encoder2.setCount(0);
-            rampMs = millis();
-            encId = 2;
+            encoder2.setCount(depthCount % 2);
           }
 
           //depth min-max bounds
@@ -767,9 +893,10 @@ void loop()
             changed = true;
             depth = 0;
           }
-          if (depth > maxdepthinmm){
+          const float depthMax = OssmBleIsMode() ? 100.0f : maxdepthinmm;
+          if (depth > depthMax){
             changed = true;
-            depth = maxdepthinmm;
+            depth = depthMax;
           }
           
           //send depth
@@ -782,8 +909,12 @@ void loop()
             SendCommand(DEPTH, depth, OSSM_ID);
             SendCommand(STROKE, stroke, OSSM_ID);
         }
-        char depth_v[7];
-        dtostrf(depth, 6, 0, depth_v);
+        char depth_v[12];
+        if (OssmBleIsMode()) {
+          snprintf(depth_v, sizeof(depth_v), "%d%%", (int)(depth + 0.5f));
+        } else {
+          dtostrf(depth, 6, 0, depth_v);
+        }
         lv_label_set_text(ui_homedepthvalue, depth_v);
         
         //
@@ -795,18 +926,12 @@ void loop()
           lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
 
 
-		      if (encoder3.getCount() >= 2){      //Stroke up
+          long strokeCount = encoder3.getCount();
+          int strokeDetents = (int)(strokeCount / 2);
+          if (strokeDetents != 0) {
             changed = true;
-            stroke -= rampValue;
-            encoder3.setCount(0);
-            rampMs = millis();
-            encId = 3;
-		      }else if (encoder3.getCount() <= -2){      //Stroke down
-            changed = true;
-            stroke += rampValue;
-            encoder3.setCount(0);
-            rampMs = millis();
-            encId = 3;
+            stroke += getRampedDetentDelta(3, strokeDetents);
+            encoder3.setCount(strokeCount % 2);
           }
 
           //Stoke min-max bounds
@@ -814,9 +939,10 @@ void loop()
             changed = true;
             stroke = 0;
           }
-          if (stroke > maxdepthinmm){
+          const float strokeMax = OssmBleIsMode() ? 100.0f : maxdepthinmm;
+          if (stroke > strokeMax){
             changed = true;
-            stroke = maxdepthinmm;
+            stroke = strokeMax;
           }
           
           //send stroke
@@ -834,8 +960,12 @@ void loop()
             SendCommand(DEPTH, depth, OSSM_ID);
         }
 
-        char stroke_v[7];
-        dtostrf(stroke, 6, 0, stroke_v);
+        char stroke_v[12];
+        if (OssmBleIsMode()) {
+          snprintf(stroke_v, sizeof(stroke_v), "%d%%", (int)(stroke + 0.5f));
+        } else {
+          dtostrf(stroke, 6, 0, stroke_v);
+        }
         lv_label_set_text(ui_homestrokevalue, stroke_v);  //was lv_label_set_text(ui_homestrokevalue, stroke_v);
 
         //
@@ -845,19 +975,12 @@ void loop()
           changed = false;
           lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
 
-		      if (encoder4.getCount() >= 2){      //Stroke up
+          long sensationCount = encoder4.getCount();
+          int sensationDetents = (int)(sensationCount / 2);
+          if (sensationDetents != 0) {
             changed = true;
-            sensation += 2;
-            encoder4.setCount(0);
-            rampMs = millis();
-            encId = 4;
-		      }else if (encoder4.getCount() <= -2){      //Stroke down
-            changed = true;
-            sensation -= 2;
-            encoder4.setCount(0);
-            rampMs = millis();
-            encId = 4;
-            
+            sensation += 2.0f * getRampedDetentDelta(4, sensationDetents);
+            encoder4.setCount(sensationCount % 2);
           }
 
           //Stoke min-max bounds
@@ -1068,11 +1191,11 @@ void loop()
 void espNowRemoteTask(void *pvParameters)
 {
   for(;;){
-    if(Ossm_paired){
+    if(Ossm_paired && !OssmBleIsMode()){
       outgoingcontrol.esp_command = HEARTBEAT;
       outgoingcontrol.esp_heartbeat = true;
       outgoingcontrol.esp_target = OSSM_ID;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     }
     vTaskDelay(HEARTBEAT_INTERVAL);
   }

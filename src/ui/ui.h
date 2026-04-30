@@ -3,8 +3,8 @@
 // LVGL VERSION: 8.2
 // PROJECT: OSSM-White
 
-#ifndef _OSSM-WHITE_UI_H
-#define _OSSM-WHITE_UI_H
+#ifndef OSSM_WHITE_UI_H
+#define OSSM_WHITE_UI_H
 
 #ifdef __cplusplus
 extern "C" {
