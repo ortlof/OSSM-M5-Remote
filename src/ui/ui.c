@@ -82,6 +82,10 @@ lv_obj_t * ui_BattValue5;
 lv_obj_t * ui_Battery5;
 lv_obj_t * ui_Label4;
 lv_obj_t * ui_PatternS;
+lv_obj_t * ui_PatternContextPanel;
+lv_obj_t * ui_PatternContextDot;
+lv_obj_t * ui_PatternContextName;
+lv_obj_t * ui_PatternContextHint;
 lv_obj_t * ui_Torqe;
 lv_obj_t * ui_Logo4;
 lv_obj_t * ui_TorqeButtonL;
@@ -142,6 +146,120 @@ lv_group_t * ui_g_settings;
 #endif
 
 ///////////////////// ANIMATIONS ////////////////////
+
+
+///////////////////// PATTERN ROLLER CONTEXT ////////////////////
+#define UI_COLOR_PATTERN_BG           0xF3D7EF
+#define UI_COLOR_PATTERN_TEXT         0x2E1830
+#define UI_COLOR_PATTERN_MUTED_TEXT   0x5B3D5E
+#define UI_COLOR_PATTERN_BORDER       0x83247B
+#define UI_COLOR_PATTERN_FOCUS        0xFFFFFF
+
+#if LV_FONT_MONTSERRAT_28
+    #define UI_PATTERN_ROLLER_FONT (&lv_font_montserrat_28)
+    #define UI_PATTERN_ROLLER_HEIGHT 138
+#elif LV_FONT_MONTSERRAT_24
+    #define UI_PATTERN_ROLLER_FONT (&lv_font_montserrat_24)
+    #define UI_PATTERN_ROLLER_HEIGHT 128
+#else
+    // This project already uses lv_font_montserrat_20, so this is the largest
+    // safe fallback without changing lv_conf.h.
+    #define UI_PATTERN_ROLLER_FONT (&lv_font_montserrat_20)
+    #define UI_PATTERN_ROLLER_HEIGHT 119
+#endif
+
+typedef struct {
+    const char * name;
+    const char * hint;
+    uint32_t color;
+} ui_pattern_context_t;
+
+static const ui_pattern_context_t ui_pattern_contexts[] = {
+    {"Simple Stroke",      "Balanced baseline motion",      0x83247B},
+    {"Teasing/Pounding",   "Asymmetric in/out timing",      0xB83280},
+    {"Robo Stroke",        "Sharper acceleration profile",  0x3567B7},
+    {"Half'n'Half",        "Alternates full and half",      0x2E9F7E},
+    {"Deeper",             "Ramps depth over strokes",      0xD48720},
+    {"Stop'n'Go",          "Stroke bursts with pauses",     0xC94B3D},
+    {"Insist",             "Short focused repetitions",     0x6E55C8},
+    {"Knot",               "Fast approach, slow finish",    0xD64E8A},
+};
+
+static const uint16_t ui_pattern_context_count = sizeof(ui_pattern_contexts) / sizeof(ui_pattern_contexts[0]);
+
+static void ui_pattern_apply_roller_style(lv_obj_t * roller, lv_color_t selectedColor)
+{
+    if(roller == NULL) return;
+
+    lv_obj_set_style_radius(roller, 12, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(roller, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(roller, lv_color_hex(UI_COLOR_PATTERN_BORDER), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(roller, lv_color_hex(UI_COLOR_PATTERN_BG), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(roller, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(roller, lv_color_hex(UI_COLOR_PATTERN_TEXT), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(roller, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(roller, UI_PATTERN_ROLLER_FONT, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(roller, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(roller, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_bg_color(roller, selectedColor, LV_PART_SELECTED | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_color(roller, selectedColor, LV_PART_SELECTED | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(roller, 255, LV_PART_SELECTED | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(roller, lv_color_hex(0xFFFFFF), LV_PART_SELECTED | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(roller, 255, LV_PART_SELECTED | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(roller, UI_PATTERN_ROLLER_FONT, LV_PART_SELECTED | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_outline_color(roller, lv_color_hex(UI_COLOR_PATTERN_FOCUS), LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_outline_opa(roller, 255, LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_outline_width(roller, 2, LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_outline_pad(roller, 3, LV_PART_MAIN | LV_STATE_FOCUSED);
+}
+
+static void ui_pattern_update_context(uint16_t selected)
+{
+    if(ui_pattern_context_count == 0) return;
+    if(selected >= ui_pattern_context_count) selected = 0;
+
+    const ui_pattern_context_t * context = &ui_pattern_contexts[selected];
+    lv_color_t selectedColor = lv_color_hex(context->color);
+
+    ui_pattern_apply_roller_style(ui_PatternS, selectedColor);
+
+    if(ui_PatternContextPanel != NULL) {
+        lv_obj_set_style_border_color(ui_PatternContextPanel, selectedColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(ui_PatternContextPanel, selectedColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_PatternContextPanel, 35, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    if(ui_PatternContextDot != NULL) {
+        lv_obj_set_style_bg_color(ui_PatternContextDot, selectedColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(ui_PatternContextDot, selectedColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    if(ui_PatternContextName != NULL) {
+        lv_label_set_text(ui_PatternContextName, context->name);
+        lv_obj_set_style_text_color(ui_PatternContextName, selectedColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+
+    if(ui_PatternContextHint != NULL) {
+        lv_label_set_text(ui_PatternContextHint, context->hint);
+    }
+}
+
+static void ui_pattern_refresh_context_from_roller(void)
+{
+    if(ui_PatternS == NULL) return;
+    ui_pattern_update_context(lv_roller_get_selected(ui_PatternS));
+}
+
+static void ui_event_PatternS(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    if(event == LV_EVENT_VALUE_CHANGED || event == LV_EVENT_FOCUSED || event == LV_EVENT_CLICKED) {
+        lv_obj_t * roller = lv_event_get_target(e);
+        ui_pattern_update_context(lv_roller_get_selected(roller));
+    }
+}
 
 ///////////////////// FUNCTIONS ////////////////////
 static void ui_event_Start(lv_event_t * e)
@@ -287,6 +405,7 @@ static void ui_event_Pattern(lv_event_t * e)
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_SCREEN_LOADED) {
         screenmachine(e);
+        ui_pattern_refresh_context_from_roller();
     }
 }
 static void ui_event_PatternButtonL(lv_event_t * e)
@@ -1642,34 +1761,104 @@ void ui_Pattern_screen_init(void)
     lv_obj_set_height(ui_Label4, LV_SIZE_CONTENT);
 
     lv_obj_set_x(ui_Label4, 0);
-    lv_obj_set_y(ui_Label4, -60);
+    lv_obj_set_y(ui_Label4, -76);
 
     lv_obj_set_align(ui_Label4, LV_ALIGN_CENTER);
 
     lv_label_set_text(ui_Label4, T_SELECT_PATTERN);
 
-    lv_obj_set_style_text_font(ui_Label4, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_Label4, UI_PATTERN_ROLLER_FONT, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-// ui_PatternS
+    // ui_PatternS
 
     ui_PatternS = lv_roller_create(ui_Pattern);
     lv_roller_set_options(ui_PatternS,
                           "SimpleStroke\nTeasingPounding\nRoboStroke\nHalfnHalf\nDeeper\nStopNGo\nInsist\nKnot",
                           LV_ROLLER_MODE_NORMAL);
 
-    lv_obj_set_height(ui_PatternS, 119);
+    lv_obj_set_height(ui_PatternS, UI_PATTERN_ROLLER_HEIGHT);
     lv_obj_set_width(ui_PatternS, lv_pct(95));
 
     lv_obj_set_x(ui_PatternS, 0);
-    lv_obj_set_y(ui_PatternS, 15);
+    lv_obj_set_y(ui_PatternS, -5);
 
     lv_obj_set_align(ui_PatternS, LV_ALIGN_CENTER);
+    lv_obj_add_flag(ui_PatternS, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_event_cb(ui_PatternS, ui_event_PatternS, LV_EVENT_ALL, NULL);
 
-    lv_obj_set_style_bg_color(ui_PatternS, lv_color_hex(0xB481AC), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_PatternS, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_pattern_apply_roller_style(ui_PatternS, lv_color_hex(ui_pattern_contexts[0].color));
 
-    lv_obj_set_style_bg_color(ui_PatternS, lv_color_hex(0x83247B), LV_PART_SELECTED | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(ui_PatternS, 255, LV_PART_SELECTED | LV_STATE_DEFAULT);
+    // ui_PatternContextPanel
+
+    ui_PatternContextPanel = lv_obj_create(ui_Pattern);
+
+    lv_obj_set_width(ui_PatternContextPanel, lv_pct(95));
+    lv_obj_set_height(ui_PatternContextPanel, 32);
+
+    lv_obj_set_x(ui_PatternContextPanel, 0);
+    lv_obj_set_y(ui_PatternContextPanel, 68);
+
+    lv_obj_set_align(ui_PatternContextPanel, LV_ALIGN_CENTER);
+    lv_obj_clear_flag(ui_PatternContextPanel, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_set_style_radius(ui_PatternContextPanel, 10, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui_PatternContextPanel, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(ui_PatternContextPanel, lv_color_hex(UI_COLOR_PATTERN_BORDER), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_PatternContextPanel, lv_color_hex(UI_COLOR_PATTERN_BORDER), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_PatternContextPanel, 35, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(ui_PatternContextPanel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ui_PatternContextDot
+
+    ui_PatternContextDot = lv_obj_create(ui_PatternContextPanel);
+
+    lv_obj_set_width(ui_PatternContextDot, 14);
+    lv_obj_set_height(ui_PatternContextDot, 14);
+
+    lv_obj_set_x(ui_PatternContextDot, 10);
+    lv_obj_set_y(ui_PatternContextDot, 0);
+
+    lv_obj_set_align(ui_PatternContextDot, LV_ALIGN_LEFT_MID);
+    lv_obj_clear_flag(ui_PatternContextDot, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_set_style_radius(ui_PatternContextDot, LV_RADIUS_CIRCLE, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui_PatternContextDot, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui_PatternContextDot, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ui_PatternContextName
+
+    ui_PatternContextName = lv_label_create(ui_PatternContextPanel);
+
+    lv_obj_set_width(ui_PatternContextName, 130);
+    lv_obj_set_height(ui_PatternContextName, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_PatternContextName, 32);
+    lv_obj_set_y(ui_PatternContextName, -6);
+
+    lv_obj_set_align(ui_PatternContextName, LV_ALIGN_LEFT_MID);
+    lv_label_set_long_mode(ui_PatternContextName, LV_LABEL_LONG_DOT);
+
+    lv_obj_set_style_text_font(ui_PatternContextName, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_PatternContextName, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ui_PatternContextHint
+
+    ui_PatternContextHint = lv_label_create(ui_PatternContextPanel);
+
+    lv_obj_set_width(ui_PatternContextHint, 175);
+    lv_obj_set_height(ui_PatternContextHint, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_PatternContextHint, 32);
+    lv_obj_set_y(ui_PatternContextHint, 8);
+
+    lv_obj_set_align(ui_PatternContextHint, LV_ALIGN_LEFT_MID);
+    lv_label_set_long_mode(ui_PatternContextHint, LV_LABEL_LONG_DOT);
+
+    lv_obj_set_style_text_color(ui_PatternContextHint, lv_color_hex(UI_COLOR_PATTERN_MUTED_TEXT), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui_PatternContextHint, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_PatternContextHint, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_pattern_update_context(0);
 
 }
 void ui_Torqe_screen_init(void)

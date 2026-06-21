@@ -47,7 +47,9 @@
 #define T_Insist            "Insist"
 #define T_JackHammer        "Jack Hammer"
 #define T_StrokeNibbler     "Stroke Nibbler"
+#define T_Wave              "Wave"
 #define T_Knot              "Knot"
+
 
 #define T_CUM_SPEED         "CUM Speed"
 #define T_CUM_TIME          "CUM Time"

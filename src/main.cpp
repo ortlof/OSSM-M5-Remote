@@ -130,7 +130,7 @@ long cum_a_enc = 0;
 long encoder4_enc = 0;
 
 extern float maxdepthinmm = 400.0;
-extern float speedlimit = 300;
+extern float speedlimit = 200;
 int speedscale = -5;
 
 float speed = 0.0;
@@ -212,6 +212,10 @@ uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast to a
 
 bool EJECT_On = false;
 bool OSSM_On = false;
+
+// ESP-NOW callbacks run outside the normal LVGL loop.
+// Keep UI work in loop(), because LVGL enjoys exploding when called from random tasks.
+volatile bool pendingHomeAfterPairing = false;
 
 // Tasks:
 
@@ -305,6 +309,24 @@ static void event_cb(lv_event_t *e)
 }
 
 
+void updateHomeSpeedUi()
+{
+  speed = constrain(speed, 0.0f, speedlimit);
+  lv_slider_set_range(ui_homespeedslider, 0, (int32_t)speedlimit);
+  lv_slider_set_value(ui_homespeedslider, (int32_t)speed, LV_ANIM_OFF);
+
+  char speed_v[7];
+  dtostrf(speed, 6, 0, speed_v);
+  lv_label_set_text(ui_homespeedvalue, speed_v);
+}
+
+void updateHomeLimitsAndValues()
+{
+  updateHomeSpeedUi();
+  lv_slider_set_range(ui_homedepthslider, 0, (int32_t)maxdepthinmm);
+  lv_slider_set_range(ui_homestrokeslider, 0, (int32_t)maxdepthinmm);
+}
+
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 }
@@ -335,14 +357,19 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       LogDebug("Failed to remove peer");
     }
 
-    
-    if(incomingcontrol.esp_speed > speedlimit){
-      speedlimit = 300;
-    } else (
-    speedlimit = incomingcontrol.esp_speed);
+
+    // The board sends its speed limit once during pairing. After that, speed is local on the remote.
+    if(incomingcontrol.esp_speed > 0){
+      speedlimit = incomingcontrol.esp_speed;
+    }
+    speed = constrain(speed, 0.0f, speedlimit);
     LogDebug(speedlimit);
-    maxdepthinmm = incomingcontrol.esp_depth;
+
+    if(incomingcontrol.esp_depth > 0){
+      maxdepthinmm = incomingcontrol.esp_depth;
+    }
     LogDebug(maxdepthinmm);
+
     pattern = incomingcontrol.esp_pattern;
     LogDebug(pattern);
     outgoingcontrol.esp_target = OSSM_ID;
@@ -352,8 +379,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     
     if (result == ESP_OK) {
       Ossm_paired = true;
-      lv_label_set_text(ui_connect, "Connected");
-      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+      pendingHomeAfterPairing = true;
     }
   }
   switch(incomingcontrol.esp_command)
@@ -391,6 +417,8 @@ bool SendCommand(int Command, float Value, int Target){
       return false;
     }
   }
+
+  return false;
 }
 
 void connectbutton(lv_event_t * e)
@@ -456,12 +484,9 @@ void screenmachine(lv_event_t * e)
     st_screens = ST_UI_START;
   } else if (lv_scr_act() == ui_Home){
     st_screens = ST_UI_HOME;
-    speed = lv_slider_get_value(ui_homespeedslider);
+    updateHomeLimitsAndValues();
     LogDebug(speedenc);
     LogDebug(speed);
-
-    lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
-    lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
 
             
   } else if (lv_scr_act() == ui_Menue){
@@ -648,6 +673,15 @@ void loop()
 
      M5.update();
      lv_task_handler();
+
+     if(pendingHomeAfterPairing){
+       pendingHomeAfterPairing = false;
+       lv_label_set_text(ui_connect, "Connected");
+       updateHomeLimitsAndValues();
+       lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+       st_screens = ST_UI_HOME;
+     }
+
      Button1.tick();
      Button2.tick();
      Button3.tick();
@@ -692,7 +726,6 @@ void loop()
         //
         if(lv_slider_is_dragged(ui_homespeedslider) == false){ //if knob gets rotated
           changed = false;
-          lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
 
           if (encoder1.getCount() >= 2){      //speed up
             changed = true;
@@ -702,7 +735,7 @@ void loop()
             encId = 1;
 		      }else if (encoder1.getCount() <= -2){      //speed down
             changed = true;
-            speed -=rampValue;
+            speed -= rampValue;
             encoder1.setCount(0);
             rampMs = millis();
             encId = 1;
@@ -718,19 +751,15 @@ void loop()
             speed = speedlimit;
           }
           
-          //send speed
+          //send speed to board; the board does not send speed feedback
           if (changed) {
             SendCommand(SPEED, speed, OSSM_ID);
           }
-        
-        
         }else if (lv_slider_get_value(ui_homespeedslider) != speed){ //if slider moved
-            speed = lv_slider_get_value(ui_homespeedslider);
+            speed = constrain((float)lv_slider_get_value(ui_homespeedslider), 0.0f, speedlimit);
             SendCommand(SPEED, speed, OSSM_ID);
         }
-        char speed_v[7];
-        dtostrf(speed, 6, 0, speed_v);
-        lv_label_set_text(ui_homespeedvalue, speed_v);
+        updateHomeSpeedUi();
 
         //
         // Encoder 2 Depth 
